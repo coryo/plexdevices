@@ -1,18 +1,14 @@
 import xml.etree.ElementTree as ET
 import uuid
-import logging
 import requests
 from .compat import json
 from .device import Device
 from .exceptions import PlexTVError
 from .constants import *
 
-logging.basicConfig(filename='plex.log', level=logging.DEBUG)
-
 class Session(object):
 
     def __init__(self, user=None, password=None, token=None):
-        logging.debug('test')
         self.product = 'plexapi-session'
         self.identifier = str(uuid.uuid5(uuid.NAMESPACE_DNS, self.product))
         self.version = 1
