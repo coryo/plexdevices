@@ -1,4 +1,4 @@
-import requests
+from .packages import requests
 import shutil
 import xml.etree.ElementTree as ET
 from .compat import json, quote

@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 import uuid
-import requests
+from .packages import requests
 from .compat import json
 from .device import Device
 from .exceptions import PlexTVError

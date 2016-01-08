@@ -3,7 +3,7 @@ import time
 from collections import deque
 import xml.etree.ElementTree as ET
 import threading
-import requests
+from .packages import requests
 from .compat import (json, urlparse, HTTPServer, BaseHTTPRequestHandler)
 from .exceptions import ProvidesError
 from .constants import *
