@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from .compat import json, quote
 from .exceptions import ProvidesError, DeviceConnectionsError
 from .constants import *
+from .media import MediaContainer
 
 class Device(object):
 
@@ -88,6 +89,10 @@ class Device(object):
                 return data
         else:
             return data
+
+    def media_container(self, endpoint, size=None, page=None, params=None, usejson=True):
+        return MediaContainer(self, self.container(endpoint, size, page,
+                                                   params, usejson))
 
     def _parse_xml(self, root):
         children = root.getchildren()
