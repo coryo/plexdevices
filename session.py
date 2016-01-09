@@ -59,7 +59,7 @@ class Session(object):
                 if item.tag == 'error':
                     raise PlexTVError(item.text)
                 elif item.tag == 'Device':
-                    device = Device(item, self.identifier)
+                    device = Device(item)
                     self._devices.append(device)
                     if PROVIDES['SERVER'] in device.provides:
                         self.servers.append(device)

@@ -47,33 +47,18 @@ class MediaObject(object):
         key = parts[0]
 
         if key.startswith('/system/services/'):
-            data = self.parent.server.parent(key)
+            data = self.parent.server.container(key)
             key = data['_children'][0]['key']
 
         if key.startswith('/:/'):
-            data = self.parent.server.parent(key)
-            print(data)
+            data = self.parent.server.container(key)
             key = data['_children'][0]['key']
-            print(key)
             url = key
         else:
             url = '{}{}?X-Plex-Token={}'.format(self.parent.server.active.url,
                                                 key,
                                                 self.parent.server.access_token)
         return url
-
-    def update_offset(self, new_offset):
-        self['viewOffset'] = new_offset
-        if 'duration' in self:
-            print(self['duration'])
-            perc = new_offset / self['duration']
-            if perc > 0.96:
-                self.mark_watched()
-            elif perc < 0.05:
-                self.mark_unwatched()
-            else:
-                if 'ratingKey' in self:
-                    self.parent.server.set_view_offset(self['ratingKey'], new_offset)
 
     def mark_watched(self):
         self.parent.server.mark_watched(self['ratingKey'])
@@ -82,3 +67,14 @@ class MediaObject(object):
     def mark_unwatched(self):
         self.parent.server.mark_unwatched(self['ratingKey'])
         self['offset'] = 0
+
+    @property
+    def markable(self):
+        return (
+            self['_elementType'] in ['Video', 'Track']
+            and self.parent.get('identifier') == 'com.plexapp.plugins.library'
+        )
+
+    @property
+    def playable(self):
+        return self['_elementType'] in ['Video', 'Track', 'Photo']

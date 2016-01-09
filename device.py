@@ -8,8 +8,7 @@ from .media import MediaContainer
 
 class Device(object):
 
-    def __init__(self, data, cid):
-        self.cid = cid
+    def __init__(self, data):
         self.name = data.get('name')
         self.product = data.get('product')
         self.product_version = data.get('productVersion')
@@ -118,15 +117,6 @@ class Device(object):
                                  raw=True)
         return res
 
-    def set_view_offset(self, key, offset):
-        if PROVIDES['SERVER'] not in self.provides:
-            raise ProvidesError(PROVIDES['SERVER'], self.provides)
-        code, res = self.request('/:/progress', headers=self.headers, params={
-            'key': key,
-            'identifier': 'com.plexapp.plugins.library',
-            'time': offset
-        })
-
     def mark_watched(self, key):
         if PROVIDES['SERVER'] not in self.provides:
             raise ProvidesError(PROVIDES['SERVER'], self.provides)
@@ -134,6 +124,7 @@ class Device(object):
             'key': key,
             'identifier': 'com.plexapp.plugins.library',
         })
+
     def mark_unwatched(self, key):
         if PROVIDES['SERVER'] not in self.provides:
             raise ProvidesError(PROVIDES['SERVER'], self.provides)
@@ -141,6 +132,33 @@ class Device(object):
             'key': key,
             'identifier': 'com.plexapp.plugins.library',
         })
+
+    def play_queue(self, player_headers, media_object, mtype='video'):
+        if PROVIDES['SERVER'] not in self.provides:
+            raise ProvidesError(PROVIDES['SERVER'], self.provides)
+        headers = self.headers
+        headers.update({
+            'Accept': 'application/json'
+        })
+        headers.update(player_headers)
+        if mtype in ['track', 'album']:
+            media = 'music'
+        elif mtype in ['episode', 'season', 'movie', 'video']:
+            media = 'video'
+        elif mtype == 'photo':
+            media = 'photo'
+        elif mtype == 'mixed':
+            media = 'video'
+        # make a playQueue
+        uri = 'library://{}/directory/{}'.format(
+            headers['X-Plex-Client-Identifier'], media_object['key'])
+        code, data = self.request('/playQueues', requests.post,
+                                  headers=headers,
+                                  params={'type': media, 'uri': uri})
+        # extract playQueueID from response
+        pqid = json.loads(data).get('playQueueID', 0)
+        return MediaContainer(self,
+                              self.container('/playQueues/{}'.format(pqid)))
 
 
 class Connection(object):
