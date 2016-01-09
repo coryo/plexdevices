@@ -129,7 +129,7 @@ class Device(object):
             'key': key,
             'identifier': 'com.plexapp.plugins.library',
         })
-    def mark_unwatchd(self, key):
+    def mark_unwatched(self, key):
         if PROVIDES['SERVER'] not in self.provides:
             raise ProvidesError(PROVIDES['SERVER'], self.provides)
         code, res = self.request('/:/unscrobble', headers=self.headers, params={
