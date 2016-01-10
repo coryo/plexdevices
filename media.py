@@ -116,3 +116,12 @@ class MediaObject(object):
                 self.get('type', None) == 'photoalbum'
                 or (self.get('type', None) == 'photo'
                     and self.get('index', 0) == 1))
+
+    @property
+    def has_parent(self):
+        return 'parentKey' in self
+
+    @property
+    def has_grandparent(self):
+        return 'grandparentKey' in self
+
