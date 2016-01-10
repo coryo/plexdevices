@@ -1,3 +1,5 @@
+from .packages import requests
+
 class MediaContainer(object):
     def __init__(self, server, data):
         self.data = data
@@ -14,11 +16,28 @@ class MediaContainer(object):
     def __contains__(self, key):
         return key in self.data
 
+    def __len__(self):
+        return len(self.children)
+
     def get(self, key, default=None):
         try:
             return self.data[key]
         except Exception:
-            return default      
+            return default
+
+
+class PlayQueue(MediaContainer):
+    def __init__(self, server, data):
+        super(PlayQueue, self).__init__(server, data)
+        self.selected_item = self.get_selected_item()
+
+    def get_selected_item(self):
+        try:
+            return [x for x in self.children
+                    if x['playQueueItemID'] == self['playQueueSelectedItemID']
+                   ][0]
+        except Exception:
+            return None
 
 
 class MediaObject(object):
@@ -51,7 +70,9 @@ class MediaObject(object):
             key = data['_children'][0]['key']
 
         if key.startswith('/:/'):
-            data = self.parent.server.container(key)
+            data = self.parent.server.container(key, allow_redirects=False)
+            if isinstance(data, str):
+                return data
             key = data['_children'][0]['key']
             url = key
         else:
@@ -61,11 +82,17 @@ class MediaObject(object):
         return url
 
     def mark_watched(self):
-        self.parent.server.mark_watched(self['ratingKey'])
+        self.parent.server.request('/:/scrobble', params={
+            'key': self['ratingKey'],
+            'identifier': self.parent['identifier'],
+        })
         self['offset'] = 0
 
     def mark_unwatched(self):
-        self.parent.server.mark_unwatched(self['ratingKey'])
+        self.parent.server.request('/:/unscrobble', params={
+            'key': self['ratingKey'],
+            'identifier': self.parent['identifier'],
+        })
         self['offset'] = 0
 
     @property
@@ -76,5 +103,16 @@ class MediaObject(object):
         )
 
     @property
-    def playable(self):
-        return self['_elementType'] in ['Video', 'Track', 'Photo']
+    def is_playable(self):
+        return self['_elementType'] in ['Video', 'Track']
+
+    @property
+    def is_photo(self):
+        return self['_elementType'] == 'Photo'
+
+    @property
+    def is_photo_album(self):
+        return (self['_elementType'] == 'Directory' and 
+                self.get('type', None) == 'photoalbum'
+                or (self.get('type', None) == 'photo'
+                    and self.get('index', 0) == 1))

@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from .compat import json, quote
 from .exceptions import ProvidesError, DeviceConnectionsError
 from .constants import *
-from .media import MediaContainer
+from .media import MediaContainer, PlayQueue
 
 class Device(object):
 
@@ -46,23 +46,30 @@ class Device(object):
         return self.active
 
     def request(self, endpoint, method=requests.get, data=None, params=None,
-                headers=None, raw=False):
+                headers={}, raw=False, allow_redirects=True):
         if self.active is None:
             self.active_connection()
             if self.active is None:
                 raise DeviceConnectionsError(self)
+        if 'X-Plex-Token' not in headers:
+            headers.update(self.headers)
         try:
             url = (self.active.uri + endpoint if self.https_required else
                    'http://{}:{}{}'.format(self.active.address,
                                            self.active.port, endpoint))
-            res = method(url, headers=headers, params=params, data=data)
+            res = method(url, headers=headers, params=params, data=data,
+                         allow_redirects=allow_redirects)
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout):
             return None
         else:
-            return (res.status_code, res.content if raw else res.text)
+            if res.status_code == 302:
+                return (res.status_code, res.headers['Location'])
+            else:
+                return (res.status_code, res.content if raw else res.text)
 
-    def container(self, endpoint, size=None, page=None, params=None, usejson=True):
+    def container(self, endpoint, size=None, page=None, params=None,
+                  usejson=True, allow_redirects=True):
         if PROVIDES['SERVER'] not in self.provides:
             raise ProvidesError(PROVIDES['SERVER'], self.provides)
         headers = self.headers
@@ -72,7 +79,10 @@ class Device(object):
             headers['X-Plex-Container-Start'] = page*size
             headers['X-Plex-Container-Size'] = size
         code, msg = self.request(endpoint, method=requests.get, params=params,
-                                 headers=headers)
+                                 headers=headers,
+                                 allow_redirects=allow_redirects)
+        if code == 302:
+            return msg
         try:
             data = json.loads(msg)
         except Exception:
@@ -89,7 +99,8 @@ class Device(object):
         else:
             return data
 
-    def media_container(self, endpoint, size=None, page=None, params=None, usejson=True):
+    def media_container(self, endpoint, size=None, page=None, params=None,
+                        usejson=True):
         return MediaContainer(self, self.container(endpoint, size, page,
                                                    params, usejson))
 
@@ -117,48 +128,35 @@ class Device(object):
                                  raw=True)
         return res
 
-    def mark_watched(self, key):
-        if PROVIDES['SERVER'] not in self.provides:
-            raise ProvidesError(PROVIDES['SERVER'], self.provides)
-        code, res = self.request('/:/scrobble', headers=self.headers, params={
-            'key': key,
-            'identifier': 'com.plexapp.plugins.library',
-        })
-
-    def mark_unwatched(self, key):
-        if PROVIDES['SERVER'] not in self.provides:
-            raise ProvidesError(PROVIDES['SERVER'], self.provides)
-        code, res = self.request('/:/unscrobble', headers=self.headers, params={
-            'key': key,
-            'identifier': 'com.plexapp.plugins.library',
-        })
-
-    def play_queue(self, player_headers, media_object, mtype='video'):
+    def play_queue(self, player_headers, media_object):
         if PROVIDES['SERVER'] not in self.provides:
             raise ProvidesError(PROVIDES['SERVER'], self.provides)
         headers = self.headers
-        headers.update({
-            'Accept': 'application/json'
-        })
+        headers['Accept'] = 'application/json'
         headers.update(player_headers)
-        if mtype in ['track', 'album']:
-            media = 'music'
-        elif mtype in ['episode', 'season', 'movie', 'video']:
+        if 'type' not in media_object:
             media = 'video'
-        elif mtype == 'photo':
-            media = 'photo'
-        elif mtype == 'mixed':
-            media = 'video'
+        else:
+            if media_object['type'] in ['track', 'album']:
+                media = 'music'
+            elif media_object['type'] in ['episode', 'season', 'movie',
+                                          'video', 'clip']:
+                media = 'video'
+            elif media_object['type'] == 'photo':
+                media = 'photo'
+            else:
+                media = 'video'
         # make a playQueue
-        uri = 'library://{}/directory/{}'.format(
-            headers['X-Plex-Client-Identifier'], media_object['key'])
+        uri = 'library://{}/item/{}'.format(
+            headers['X-Plex-Client-Identifier'],
+            quote(media_object['key'], safe='')
+        )
         code, data = self.request('/playQueues', requests.post,
                                   headers=headers,
                                   params={'type': media, 'uri': uri})
         # extract playQueueID from response
-        pqid = json.loads(data).get('playQueueID', 0)
-        return MediaContainer(self,
-                              self.container('/playQueues/{}'.format(pqid)))
+        pqid = json.loads(data)['playQueueID']
+        return PlayQueue(self, self.container('/playQueues/{}'.format(pqid)))
 
 
 class Connection(object):
