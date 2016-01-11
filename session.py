@@ -14,13 +14,12 @@ class Session(object):
         self.version = 1
         self.token = token
         self.user = user
-        self.password = password
         self._devices = []
         self.servers = []
         self.players = []
 
         if user is not None and password is not None:
-            self.login()
+            self.login(password)
 
     def __repr__(self):
         return '<{}:{}>'.format(self.__class__.__name__, self.token)
@@ -66,12 +65,12 @@ class Session(object):
                     elif PROVIDES['PLAYER'] in device.provides:
                         self.players.append(device)
 
-    def login(self):
+    def login(self, password):
         """JSON. """
         try:
             res = requests.post('https://plex.tv/users/sign_in.json',
                                 data={'user[login]': self.user,
-                                      'user[password]': self.password},
+                                      'user[password]': password},
                                 headers=self.headers)
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout) as e:
