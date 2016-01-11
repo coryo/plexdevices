@@ -118,6 +118,10 @@ class MediaObject(object):
                     and self.get('index', 0) == 1))
 
     @property
+    def is_input(self):
+        return int(self.get('search', 0)) == 1
+
+    @property
     def has_parent(self):
         return 'parentKey' in self
 
