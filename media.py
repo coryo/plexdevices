@@ -103,9 +103,13 @@ class MediaObject(object):
         )
 
     @property
-    def is_playable(self):
-        return self['_elementType'] in ['Video', 'Track']
+    def is_video(self):
+        return self['_elementType'] == 'Video'
 
+    @property
+    def is_audio(self):
+        return self['_elementType'] == 'Track'
+    
     @property
     def is_photo(self):
         return self['_elementType'] == 'Photo'
@@ -129,3 +133,38 @@ class MediaObject(object):
     def has_grandparent(self):
         return 'grandparentKey' in self
 
+    @property
+    def in_progress(self):
+        return 'viewOffset' in self
+    
+    @property
+    def watched(self):
+        return 'lastViewedAt' in self and not self.in_progress
+
+    @property
+    def parent_name(self):
+        media = self['type']
+        if media == 'album':
+            return 'Artist'
+        elif media == 'track':
+            return 'Album'
+        elif media == 'season':
+            return 'Show'
+        elif media == 'episode':
+            return 'Season'
+        elif media == 'photo':
+            return 'Album'
+        else:
+            return 'Parent'
+
+    @property
+    def grandparent_name(self):
+        media = self['type']
+        if media == 'track':
+            return 'Artist'
+        elif media == 'episode':
+            return 'Show'
+        else:
+            return 'Grandparent'
+
+    
