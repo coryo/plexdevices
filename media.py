@@ -61,10 +61,15 @@ class MediaObject(object):
         except Exception:
             return default
 
-    def resolve_url(self):
-        parts = [part['key'] for part in self['_children'][0]['_children']]
-        key = parts[0]
+    def get_all_keys(self):
+        """return a list of tuples of (height, key) for each key in the item.
+        resolve_key one of the keys to get the final url"""
+        items = self['_children']
+        parts = [(part['height'], part['_children'][0]['key']) 
+                 for part in items if part['_elementType'] == 'Media']
+        return parts
 
+    def resolve_key(self, key):
         if key.startswith('/system/services/'):
             data = self.parent.server.container(key)
             key = data['_children'][0]['key']
@@ -80,6 +85,12 @@ class MediaObject(object):
                                                 key,
                                                 self.parent.server.access_token)
         return url
+
+    def resolve_url(self):
+        """return the url of the first part regardless of how many there are"""
+        parts = [part['key'] for part in self['_children'][0]['_children']]
+        key = parts[0]
+        return self.resolve_key(key)
 
     def mark_watched(self):
         self.parent.server.request('/:/scrobble', params={
