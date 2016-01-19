@@ -1,11 +1,13 @@
 from .packages import requests
 
+
 class MediaContainer(object):
     def __init__(self, server, data):
         self.data = data
         self.server = server
-        self.children = [MediaObject(child, self)
-                         for child in data['_children']]
+        self.children = ([MediaObject(child, self)
+                         for child in data['_children']] if '_children' in data
+                         else [])
 
     def __getitem__(self, key):
         return self.data[key]
@@ -35,7 +37,7 @@ class PlayQueue(MediaContainer):
         try:
             return [x for x in self.children
                     if x['playQueueItemID'] == self['playQueueSelectedItemID']
-                   ][0]
+                    ][0]
         except Exception:
             return None
 
@@ -137,6 +139,10 @@ class MediaObject(object):
         return int(self.get('search', 0)) == 1
 
     @property
+    def is_settings(self):
+        return int(self.get('settings', 0)) == 1
+
+    @property
     def has_parent(self):
         return 'parentKey' in self
 
@@ -177,5 +183,3 @@ class MediaObject(object):
             return 'Show'
         else:
             return 'Grandparent'
-
-
