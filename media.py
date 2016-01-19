@@ -65,7 +65,7 @@ class MediaObject(object):
         """return a list of tuples of (height, key) for each key in the item.
         resolve_key one of the keys to get the final url"""
         items = self['_children']
-        parts = [(part['height'], part['_children'][0]['key']) 
+        parts = [(part.get('height', part.get('title', 1)), part['_children'][0]['key'])
                  for part in items if part['_elementType'] == 'Media']
         return parts
 
@@ -120,14 +120,14 @@ class MediaObject(object):
     @property
     def is_audio(self):
         return self['_elementType'] == 'Track'
-    
+
     @property
     def is_photo(self):
         return self['_elementType'] == 'Photo'
 
     @property
     def is_photo_album(self):
-        return (self['_elementType'] == 'Directory' and 
+        return (self['_elementType'] == 'Directory' and
                 self.get('type', None) == 'photoalbum'
                 or (self.get('type', None) == 'photo'
                     and self.get('index', 0) == 1))
@@ -147,7 +147,7 @@ class MediaObject(object):
     @property
     def in_progress(self):
         return 'viewOffset' in self
-    
+
     @property
     def watched(self):
         return 'lastViewedAt' in self and not self.in_progress
@@ -178,4 +178,4 @@ class MediaObject(object):
         else:
             return 'Grandparent'
 
-    
+
