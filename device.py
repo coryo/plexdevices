@@ -1,3 +1,4 @@
+import logging
 from .packages import requests
 import shutil
 import xml.etree.ElementTree as ET
@@ -5,6 +6,8 @@ from .compat import json, quote
 from .exceptions import ProvidesError, DeviceConnectionsError
 from .constants import *
 from .media import MediaContainer, PlayQueue
+log = logging.getLogger(__name__)
+
 
 class Device(object):
 
@@ -50,6 +53,7 @@ class Device(object):
         if self.active is None:
             self.active_connection()
             if self.active is None:
+                log.error('request: unable to get an active connection.')
                 raise DeviceConnectionsError(self)
         if 'X-Plex-Token' not in headers:
             headers.update(self.headers)
@@ -57,12 +61,18 @@ class Device(object):
             url = (self.active.uri + endpoint if self.https_required else
                    'http://{}:{}{}'.format(self.active.address,
                                            self.active.port, endpoint))
+            log.debug(('request: URL={}, raw={}, headers={}, params={}, '
+                       'allow_redirects={}').format(url, raw, headers, params,
+                                                    allow_redirects))
             res = method(url, headers=headers, params=params, data=data,
                          allow_redirects=allow_redirects)
         except (requests.exceptions.ConnectionError,
-                requests.exceptions.Timeout):
-            return None
+                requests.exceptions.Timeout) as e:
+            log.error('request: error connecting - ' + str(e))
+            self.active = None
+            raise DeviceConnectionsError(self)
         else:
+            log.debug('response: %d' % res.status_code)
             if res.status_code == 302:
                 return (res.status_code, res.headers['Location'])
             else:
@@ -76,7 +86,7 @@ class Device(object):
         if usejson:
             headers['Accept'] = 'application/json'
         if size is not None and page is not None:
-            headers['X-Plex-Container-Start'] = page*size
+            headers['X-Plex-Container-Start'] = page * size
             headers['X-Plex-Container-Size'] = size
         code, msg = self.request(endpoint, method=requests.get, params=params,
                                  headers=headers,
@@ -168,6 +178,7 @@ class Connection(object):
         self.uri = data.get('uri')
         self.local = bool(int(data.get('local')))
         self.active = False
+        self.url = None
 
     def __repr__(self):
         return '<{}:{}>'.format(self.__class__.__name__, self.uri)

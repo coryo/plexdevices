@@ -1,4 +1,6 @@
+import logging
 from .packages import requests
+log = logging.getLogger(__name__)
 
 
 class MediaContainer(object):
@@ -26,6 +28,11 @@ class MediaContainer(object):
             return self.data[key]
         except Exception:
             return default
+
+    @property
+    def is_library(self):
+        assert 'identifier' in self
+        return self['identifier'] == 'com.plexapp.plugins.library'
 
 
 class PlayQueue(MediaContainer):
@@ -66,26 +73,33 @@ class MediaObject(object):
     def get_all_keys(self):
         """return a list of tuples of (height, key) for each key in the item.
         resolve_key one of the keys to get the final url"""
+        log.debug('get_all_keys: {}'.format(self['_children']))
         items = self['_children']
         parts = [(part.get('height', part.get('title', 1)), part['_children'][0]['key'])
                  for part in items if part['_elementType'] == 'Media']
+        log.debug('get_all_keys: parts={}'.format(parts))
         return parts
 
     def resolve_key(self, key):
+        log.debug('attempting so resolve the key %s' % key)
         if key.startswith('/system/services/'):
+            log.debug('key is a system service.')
             data = self.parent.server.container(key)
             key = data['_children'][0]['key']
+            log.debug('got key: %s' % key)
 
         if key.startswith('/:/'):
+            log.debug('key is a some server function.')
             data = self.parent.server.container(key, allow_redirects=False)
             if isinstance(data, str):
+                log.debug('key caused a redirect. target=%s' % data)
                 return data
-            key = data['_children'][0]['key']
-            url = key
+            url = data['_children'][0]['key']
         else:
             url = '{}{}?X-Plex-Token={}'.format(self.parent.server.active.url,
                                                 key,
                                                 self.parent.server.access_token)
+        log.debug('resolved url: %s' % url)
         return url
 
     def resolve_url(self):
@@ -99,21 +113,16 @@ class MediaObject(object):
             'key': self['ratingKey'],
             'identifier': self.parent['identifier'],
         })
-        self['offset'] = 0
 
     def mark_unwatched(self):
         self.parent.server.request('/:/unscrobble', params={
             'key': self['ratingKey'],
             'identifier': self.parent['identifier'],
         })
-        self['offset'] = 0
 
     @property
     def markable(self):
-        return (
-            self['_elementType'] in ['Video', 'Track']
-            and self.parent.get('identifier') == 'com.plexapp.plugins.library'
-        )
+        return (self.is_audio or self.is_video) and self.parent.is_library
 
     @property
     def is_video(self):
@@ -128,11 +137,15 @@ class MediaObject(object):
         return self['_elementType'] == 'Photo'
 
     @property
+    def is_directory(self):
+        return self['_elementType'] == 'Directory'
+
+    @property
     def is_photo_album(self):
-        return (self['_elementType'] == 'Directory' and
-                self.get('type', None) == 'photoalbum'
-                or (self.get('type', None) == 'photo'
-                    and self.get('index', 0) == 1))
+        return (self.is_directory and
+                self.get('type', None) == 'photoalbum' or
+                (self.get('type', None) == 'photo' and
+                 self.get('index', 0) == 1))
 
     @property
     def is_input(self):
