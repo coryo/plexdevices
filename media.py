@@ -31,8 +31,7 @@ class MediaContainer(object):
 
     @property
     def is_library(self):
-        assert 'identifier' in self
-        return self['identifier'] == 'com.plexapp.plugins.library'
+        return self.get('identifier', None) == 'com.plexapp.plugins.library'
 
 
 class PlayQueue(MediaContainer):
@@ -139,6 +138,10 @@ class MediaObject(object):
     @property
     def is_directory(self):
         return self['_elementType'] == 'Directory'
+
+    @property
+    def is_album(self):
+        return self.is_directory and self.get('type', None) == 'album'
 
     @property
     def is_photo_album(self):

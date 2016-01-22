@@ -157,8 +157,9 @@ class Device(object):
             else:
                 media = 'video'
         # make a playQueue
-        uri = 'library://{}/item/{}'.format(
+        uri = 'library://{}/{}/{}'.format(
             headers['X-Plex-Client-Identifier'],
+            'directory' if media_object.is_directory else 'item',
             quote(media_object['key'], safe='')
         )
         code, data = self.request('/playQueues', requests.post,
