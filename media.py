@@ -1,5 +1,6 @@
 import logging
 from .packages import requests
+from .compat import quote, json
 log = logging.getLogger(__name__)
 
 
@@ -37,15 +38,97 @@ class MediaContainer(object):
 class PlayQueue(MediaContainer):
     def __init__(self, server, data):
         super(PlayQueue, self).__init__(server, data)
-        self.selected_item = self.get_selected_item()
+        log.debug(self.data)
 
-    def get_selected_item(self):
+    @property
+    def selected_item(self):
         try:
-            return [x for x in self.children
-                    if x['playQueueItemID'] == self['playQueueSelectedItemID']
-                    ][0]
+            return self.children[int(self['playQueueSelectedItemOffset'])]
         except Exception:
             return None
+
+    def update(self):
+        data = self.server.request('/playQueues/{}'.format(self['playQueueID']))
+        self.__init__(self.server, data)
+
+    def select(self, item):
+        if item not in self.children or 'playQueueItemID' not in item:
+            log.debug('select: item is not valid.')
+            return None
+        self['playQueueSelectedItemID'] = item['playQueueItemID']
+        self['playQueueSelectedItemOffset'] = self.children.index(item)
+        return item
+
+    def get_next(self):
+        if self.selected_item is None:
+            return None
+        i = self.children.index(self.selected_item) + 1
+        return self.select(self.children[i]) if 0 <= i <= len(self) - 1 else None
+
+    def get_prev(self):
+        if self.selected_item is None:
+            return None
+        i = self.children.index(self.selected_item) - 1
+        return self.select(self.children[i]) if 0 <= i <= len(self) - 1 else None
+
+    def remove_item(self, item):
+        url = '/playQueues/{}/items/{}'.format(self['playQueueID'],
+                                               item['playQueueItemID'])
+        code, data = self.server.request(url, method=requests.delete,
+                                         headers={'Accept': 'application/json'})
+        if 200 <= code < 400:
+            self.__init__(self.server, json.loads(data))
+        else:
+            log.error('playqueue: could not remove item from playqueue.')
+
+    def add_item(self, media_object, player_headers):
+        headers = self.server.headers
+        headers['Accept'] = 'application/json'
+        headers.update(player_headers)
+        media, uri = self.media_uri(media_object, player_headers)
+        code, data = self.server.request('/playQueues/{}'.format(self['playQueueID']),
+                                         method=requests.put,
+                                         headers=headers,
+                                         params={'type': media, 'uri': uri})
+        if 200 <= code < 400:
+            self.__init__(self.server, json.loads(data))
+        else:
+            log.error('playqueue: could not add item to playqueue.')
+
+    @staticmethod
+    def media_uri(media_object, player_headers):
+        if 'type' not in media_object:
+            media = 'video'
+        else:
+            if media_object['type'] in ['track', 'album']:
+                media = 'music'
+            elif media_object['type'] in ['episode', 'season', 'movie',
+                                          'video', 'clip']:
+                media = 'video'
+            elif media_object['type'] == 'photo':
+                media = 'photo'
+            else:
+                media = 'video'
+        uri = 'library://{}/{}/{}'.format(
+            player_headers['X-Plex-Client-Identifier'],
+            'directory' if media_object.is_directory else 'item',
+            quote(media_object['key'], safe=''))
+        return (media, uri)
+
+    @staticmethod
+    def create(server, media_object, player_headers):
+        if 'X-Plex-Client-Identifier' not in player_headers:
+            return None
+        headers = server.headers
+        headers['Accept'] = 'application/json'
+        headers.update(player_headers)
+        media, uri = PlayQueue.media_uri(media_object, player_headers)
+        code, data = server.request('/playQueues',
+                                    method=requests.post,
+                                    headers=headers,
+                                    params={'type': media, 'uri': uri})
+        pqid = json.loads(data)['playQueueID']
+        return PlayQueue(server, server.container('/playQueues/{}'.format(pqid)))
 
 
 class MediaObject(object):

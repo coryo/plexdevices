@@ -116,7 +116,7 @@ class Device(object):
 
     def _parse_xml(self, root):
         children = root.getchildren()
-        x = {k:v for k, v in root.items()}
+        x = {k: v for k, v in root.items()}
         x['_elementType'] = root.tag
         if len(children):
             x['_children'] = [self._parse_xml(child) for child in children]
@@ -132,42 +132,11 @@ class Device(object):
 
         endpoint, params = (
             (endpoint, None) if w is None or h is None else
-            ('/photo/:/transcode', {'url': self.active.url+endpoint,
+            ('/photo/:/transcode', {'url': self.active.url + endpoint,
                                     'width': w, 'height': h, 'maxSize': 1}))
         code, res = self.request(endpoint, headers=self.headers, params=params,
                                  raw=True)
         return res
-
-    def play_queue(self, player_headers, media_object):
-        if PROVIDES['SERVER'] not in self.provides:
-            raise ProvidesError(PROVIDES['SERVER'], self.provides)
-        headers = self.headers
-        headers['Accept'] = 'application/json'
-        headers.update(player_headers)
-        if 'type' not in media_object:
-            media = 'video'
-        else:
-            if media_object['type'] in ['track', 'album']:
-                media = 'music'
-            elif media_object['type'] in ['episode', 'season', 'movie',
-                                          'video', 'clip']:
-                media = 'video'
-            elif media_object['type'] == 'photo':
-                media = 'photo'
-            else:
-                media = 'video'
-        # make a playQueue
-        uri = 'library://{}/{}/{}'.format(
-            headers['X-Plex-Client-Identifier'],
-            'directory' if media_object.is_directory else 'item',
-            quote(media_object['key'], safe='')
-        )
-        code, data = self.request('/playQueues', requests.post,
-                                  headers=headers,
-                                  params={'type': media, 'uri': uri})
-        # extract playQueueID from response
-        pqid = json.loads(data)['playQueueID']
-        return PlayQueue(self, self.container('/playQueues/{}'.format(pqid)))
 
 
 class Connection(object):
