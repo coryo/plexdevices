@@ -6,6 +6,7 @@ from .compat import json, quote
 from .exceptions import ProvidesError, DeviceConnectionsError
 from .constants import *
 from .media import MediaContainer, PlayQueue
+from .utils import *
 log = logging.getLogger(__name__)
 
 
@@ -102,7 +103,7 @@ class Device(object):
             except Exception:
                 return {}
             else:
-                data = self._parse_xml(xml)
+                data = parse_xml(xml)
                 if 'totalSize' not in data:
                     data['totalSize'] = 1
                 return data
@@ -113,14 +114,6 @@ class Device(object):
                         usejson=True):
         return MediaContainer(self, self.container(endpoint, size, page,
                                                    params, usejson))
-
-    def _parse_xml(self, root):
-        children = root.getchildren()
-        x = {k: v for k, v in root.items()}
-        x['_elementType'] = root.tag
-        if len(children):
-            x['_children'] = [self._parse_xml(child) for child in children]
-        return x
 
     def image(self, endpoint, w=None, h=None):
         if endpoint.startswith('http'):

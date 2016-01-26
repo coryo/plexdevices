@@ -152,6 +152,9 @@ class MediaObject(object):
         except Exception:
             return default
 
+    def follow_key(self):
+        return self.parent.server.container(self['key'])
+
     def get_all_keys(self):
         """return a list of tuples of (height, key) for each key in the item.
         resolve_key one of the keys to get the final url"""
