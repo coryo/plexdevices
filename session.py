@@ -6,6 +6,7 @@ from .compat import json
 from .device import Device
 from .exceptions import PlexTVError
 from .constants import *
+from .utils import *
 log = logging.getLogger(__name__)
 
 
@@ -20,6 +21,7 @@ class Session(object):
         self._devices = []
         self.servers = []
         self.players = []
+        self.users = []
 
         if user is not None and password is not None:
             self.login(password)
@@ -101,3 +103,29 @@ class Session(object):
                 log.error('Response: %d - %s' % (res.status_code, res.text))
                 raise PlexTVError(error)
             self.token = data['user']['authentication_token']
+
+    def refresh_users(self):
+        try:
+            res = requests.get('https://plex.tv/api/home/users', headers=self.headers)
+            xml = ET.fromstring(res.text)
+            data = parse_xml(xml)
+            self.users = data['_children']
+        except Exception as e:
+            raise PlexTVError(str(e))
+
+    def switch_user(self, user, pin=None):
+        try:
+            params = {'pin': pin} if pin is not None else None
+            res = requests.post('https://plex.tv/api/home/users/{}/switch'.format(user),
+                                headers=self.headers,
+                                params=params)
+            xml = ET.fromstring(res.text)
+            data = parse_xml(xml)
+            log.debug(data)
+            if data['_elementType'] == 'Response':
+                raise PlexTVError(data['status'])
+        except Exception as e:
+            raise PlexTVError(str(e))
+        else:
+            self.token = data['authenticationToken']
+            self.refresh_devices()
