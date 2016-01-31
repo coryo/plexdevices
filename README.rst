@@ -1,1 +1,10 @@
 plexdevices
+===========
+
+
+Installation
+------------
+
+```
+$ pip install .
+```
