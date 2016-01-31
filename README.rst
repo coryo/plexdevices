@@ -5,6 +5,6 @@ plexdevices
 Installation
 ------------
 
-```
-$ pip install .
-```
+.. code-block:: bash
+
+    $ pip install .
