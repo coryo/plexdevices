@@ -11,6 +11,8 @@ log = logging.getLogger(__name__)
 
 
 class Device(object):
+    """A Plex device.
+    """
 
     def __init__(self, data):
         self.name = data.get('name')
@@ -19,9 +21,11 @@ class Device(object):
         self.platform = data.get('platform')
         self.platform_version = data.get('platformVersion')
         self.device = data.get('device')
+        #: Unique identifier for the device.
         self.client_identifier = data.get('clientIdentifier')
         self.created_at = data.get('createdAt')
         self.last_seen_at = data.get('lastSeenAt')
+        #: List of what the device is. (server, player)
         self.provides = data.get('provides').split(',')
         self.access_token = data.get('accessToken')
         self.owned = bool(int(data.get('owned')))
@@ -30,7 +34,9 @@ class Device(object):
         self.presence = bool(int(data.get('presence')))
         self.synced = bool(int(data.get('synced', '0')))
         self.https_required = bool(int(data.get('httpsRequired', '0')))
+        #: List of :class:`Connection <Connection>` objects.
         self.connections = [Connection(conn) for conn in data.getchildren()]
+        #: The active :class:`Connection <Connection>`.
         self.active = None
 
     def __repr__(self):
@@ -42,6 +48,7 @@ class Device(object):
         return {'X-Plex-Token': self.access_token}
 
     def active_connection(self):
+        """Test the connections. Return the working one if possible."""
         for conn in self.connections:
             if conn.test(self.access_token, secure=self.https_required):
                 self.active = conn
@@ -51,6 +58,18 @@ class Device(object):
 
     def request(self, endpoint, method=requests.get, data=None, params=None,
                 headers={}, raw=False, allow_redirects=True):
+        """Make a request to the device.
+
+        :param endpoint: location on server.
+        :param method: (optional) request function. Defaults to ``requests.get``.
+        :param data: (optional) data to send with the request. Defaults to ``None``.
+        :param params: (optional) params to include in the URL. Defaults to ``None``.
+        :param headers: (optional) additional headers. Defaults to ``{}``.
+        :param raw: (optional) return raw data. Defaults to ``False``.
+        :param allow_redirects: (optional) follow 302 redirects. Defaults to ``True``.
+        :return: (HTTP status code, data)
+        :rtype: Tuple (int, str)
+        """
         if self.active is None:
             self.active_connection()
             if self.active is None:
@@ -81,6 +100,14 @@ class Device(object):
 
     def container(self, endpoint, size=None, page=None, params=None,
                   usejson=True, allow_redirects=True):
+        """Returns a dict representing a plex media container from a server device.
+
+        :param endpoint: destination on the server. (ie /library/sections).
+        :param size: (optional) the max number of items to retrieve.
+        :param page: (optional) the page number for paging large containers.
+        :param params: (optional) Dictionary of parameters to be added to the url in the request.
+        :rtype: Dictionary
+        """
         if PROVIDES['SERVER'] not in self.provides:
             raise ProvidesError(PROVIDES['SERVER'], self.provides)
         headers = self.headers
@@ -112,10 +139,26 @@ class Device(object):
 
     def media_container(self, endpoint, size=None, page=None, params=None,
                         usejson=True):
+        """Returns a :class:`MediaContainer <MediaContainer>` from a server device.
+
+        :param endpoint: destination on the server. (ie /library/sections).
+        :param size: (optional) the max number of items to retrieve.
+        :param page: (optional) the page number for paging large containers.
+        :param params: (optional) Dictionary of parameters to be added to the url in the request.
+        :return: :class:`MediaContainer <MediaContainer>` object
+        :rtype: plexdevices.MediaContainer
+        """
         return MediaContainer(self, self.container(endpoint, size, page,
                                                    params, usejson))
 
     def image(self, endpoint, w=None, h=None):
+        """Returns the raw data of an image from a server device. If w and h are set,
+        the server will transcode the image to the given size.
+
+        :param endpoint: location of the image. This can also be a full URL of an image not on the server (for easy channel support).
+        :param w: (optional) width to transcode.
+        :param h: (optional) height to transcode.
+        """
         if endpoint.startswith('http'):
             res = requests.get(endpoint)
             return res.content
@@ -133,20 +176,29 @@ class Device(object):
 
 
 class Connection(object):
+    """A Plex device connection.
+    """
 
     def __init__(self, data):
+        #: http or https.
         self.protocol = data.get('protocol')
+        #: base address.
         self.address = data.get('address')
+        #: port number.
         self.port = data.get('port')
+        #: uri provided by plex.
         self.uri = data.get('uri')
         self.local = bool(int(data.get('local')))
+        #: indicator of whether the connection is active or not.
         self.active = False
+        #: uri set by test()
         self.url = None
 
     def __repr__(self):
         return '<{}:{}>'.format(self.__class__.__name__, self.uri)
 
     def test(self, token, secure=False, timeout=1):
+        """Test the connection with the given X-Plex-Token."""
         try:
             url = (self.uri if secure else
                    'http://{}:{}'.format(self.address, self.port))

@@ -1,3 +1,8 @@
+__title__ = 'plexdevices'
+__version__ = '0.1.0'
+__author__ = 'Cory Parsons'
+
+
 from .device import Device, Connection
 from .remote import Remote
 from .session import Session

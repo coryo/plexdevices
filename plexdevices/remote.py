@@ -50,7 +50,20 @@ class RemoteServer(HTTPServer):
 
 
 class Remote(object):
+    """A remote control for a Plex device.
 
+    Basic Usage::
+
+      >>> import plexdevices
+      >>> s = plexdevices.Session(user=username, password=password)
+      >>> s.refresh_devices()
+      >>> player = s.players[0]
+      >>> r = plexdevices.Remote(player=player)
+      >>> r.timeline_subscribe()
+      >>> r.down()
+      >>> r.select()
+      >>> r.timeline_unsubscribe()
+    """
     def __init__(self, player, name, port=8000):
         if PROVIDES['PLAYER'] not in player.provides:
             raise ProvidesError(PROVIDES['PLAYER'], player.provides)
@@ -67,20 +80,21 @@ class Remote(object):
 
     @property
     def headers(self):
+        """Dictionary of the remote's ``X-Plex-Client-Identifier`` and ``X-Plex-Device-Name``."""
         return {'X-Plex-Client-Identifier': self.identifier,
                 'X-Plex-Device-Name': self.name}
 
     @staticmethod
     def parse_timeline(timeline_xml_string):
-        """Parse the timeline XML into a dict. the Timeline children are turned into key,value
-        pairs where the key is Timeline.type and the value is a dict of the Timeline properties."""
+        # Parse the timeline XML into a dict. the Timeline children are turned into key,value
+        # pairs where the key is Timeline.type and the value is a dict of the Timeline properties.
         try:
             container = ET.fromstring(timeline_xml_string)
         except ET.ParseError:
             return None
         else:
-            parsed = {k:v for k, v in container.items()}
-            parsed.update({child.get('type'): {k:v for k, v in child.items()}
+            parsed = {k: v for k, v in container.items()}
+            parsed.update({child.get('type'): {k: v for k, v in child.items()}
                            for child in container.getchildren()})
             return parsed
 
@@ -107,7 +121,7 @@ class Remote(object):
             if not self.subscribed:
                 break
             self.command('/player/timeline/subscribe', {
-                'protocol':'http',
+                'protocol': 'http',
                 'port': self.port
             })
             time.sleep(rate)
@@ -126,10 +140,11 @@ class Remote(object):
         return self.parse_timeline(self.server.last)
 
     def timeline_post(self, data):
-        """called whenever the player POSTs the timeline to the remote."""
+        """Called whenever the player POSTs the timeline to the remote. Subclass and reimplement to add functionality."""
         pass
 
     def timeline_subscribe(self):
+        """Subscribe to the timeline."""
         if self.subscribed:
             return
         self._start_server()
@@ -141,6 +156,7 @@ class Remote(object):
         self.poll_thread.start()
 
     def timeline_unsubscribe(self):
+        """Unsubscribe from the timeline."""
         if not self.subscribed:
             return
         self.command('/player/timeline/unsubscribe')
@@ -164,7 +180,9 @@ class Remote(object):
         t = self.timeline()
         return t is not None and t['location'] != 'navigation'
 
-    def mirror(self, server, key, **kwargs):
+    def mirror(self, media_object, **kwargs):
+        """Send the player to the preplay screen of the given :class:`MediaObject <MediaObject>`."""
+        server, key = media_object.parent.server, media_object['key']
         if PROVIDES['SERVER'] not in server.provides:
             raise ProvidesError(PROVIDES['SERVER'], server.provides)
         self.command('/player/mirror/details', {
@@ -178,7 +196,9 @@ class Remote(object):
             'commandID': self.command_id
         })
 
-    def play_media(self, server, key, mtype='video'):
+    def play_media(self, media_object, mtype='video'):
+        """Make the player play the given :class:`MediaObject <MediaObject>`."""
+        server, key = media_object.parent.server, media_object['key']
         if PROVIDES['SERVER'] not in server.provides:
             raise ProvidesError(PROVIDES['SERVER'], server.provides)
         headers = self.headers
@@ -255,7 +275,7 @@ class Remote(object):
     def stop(self):
         self.command('/player/playback/stop')
 
-    def seek(self, offset): # milliseconds
+    def seek(self, offset):  # milliseconds
         self.command('/player/playback/seekTo', {'offset': offset})
 
     def skip(self, key):
@@ -267,5 +287,5 @@ class Remote(object):
     def step_forward(self):
         self.command('/player/playback/stepForward')
 
-    def volume(self, v): # 0-100
+    def volume(self, v):  # 0-100
         self.command('/player/playback/setParameters', {'volume': v})

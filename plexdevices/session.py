@@ -11,6 +11,17 @@ log = logging.getLogger(__name__)
 
 
 class Session(object):
+    """A Plex session.
+
+    Basic Usage::
+
+      >>> import plexdevices
+      >>> s = plexdevices.Session(user=username, password=password)
+      >>> s.refresh_devices()
+      >>> on_deck = s.servers[0].media_container('/library/onDeck')
+      >>> on_deck.children[0].resolve_url()
+      http://server/file.mp4?X-Plex-Token=XXXXXXXXXXX
+    """
 
     def __init__(self, user=None, password=None, token=None):
         self.product = 'plexapi-session'
@@ -19,8 +30,11 @@ class Session(object):
         self.token = token
         self.user = user
         self._devices = []
+        #: List of :class:`Device <Device>`'s that provide `server` accessible by the current user.
         self.servers = []
+        #: List of :class:`Device <Device>`'s that provide `player` accessible by the current user.
         self.players = []
+        #: List of Plex Home users.
         self.users = []
 
         if user is not None and password is not None:
@@ -39,7 +53,7 @@ class Session(object):
         return headers
 
     def refresh_devices(self):
-        """XML Only. get devices from api/resources"""
+        """Retrieve the devices for the current user from ``https://plex.tv/api/resources``"""
         del self._devices[:]
         del self.servers[:]
         del self.players[:]
@@ -76,7 +90,7 @@ class Session(object):
                         self.players.append(device)
 
     def login(self, password):
-        """JSON. """
+        """Retrieve the token for the session user from ``https://plex.tv/users/sign_in.json.``"""
         try:
             log.debug('Signing in to plex.tv as "%s"' % self.user)
             res = requests.post('https://plex.tv/users/sign_in.json',
@@ -105,6 +119,7 @@ class Session(object):
             self.token = data['user']['authentication_token']
 
     def refresh_users(self):
+        """Retrieve the Plex Home users from ``https://plex.tv/api/home/users``."""
         try:
             res = requests.get('https://plex.tv/api/home/users', headers=self.headers)
             xml = ET.fromstring(res.text)
@@ -113,10 +128,15 @@ class Session(object):
         except Exception as e:
             raise PlexTVError(str(e))
 
-    def switch_user(self, user, pin=None):
+    def switch_user(self, user_id, pin=None):
+        """Switch the current user to the given user id, and refresh the available devices.
+
+        :param user_id: the `id` of the user. As given from ``https://plex.tv/api/home/users``.
+        :param pin: (optional) the 4-digit PIN code of the user.
+        """
         try:
             params = {'pin': pin} if pin is not None else None
-            res = requests.post('https://plex.tv/api/home/users/{}/switch'.format(user),
+            res = requests.post('https://plex.tv/api/home/users/{}/switch'.format(user_id),
                                 headers=self.headers,
                                 params=params)
             xml = ET.fromstring(res.text)
