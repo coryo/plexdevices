@@ -64,3 +64,8 @@ elif is_py3:
     bytes = bytes
     basestring = (str, bytes)
     numeric_types = (int, float)
+
+try:
+    iteritems = dict.iteritems
+except AttributeError:
+    iteritems = dict.items

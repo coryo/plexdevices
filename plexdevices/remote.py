@@ -4,14 +4,15 @@ from collections import deque
 import xml.etree.ElementTree as ET
 import threading
 from .packages import requests
+from .device import Player
 from .compat import (json, urlparse, HTTPServer, BaseHTTPRequestHandler)
-from .exceptions import ProvidesError
-from .constants import *
+from .media import PlayQueue
 
 LOCATIONS = {'navigation': 'navigation',
              'fullScreenVideo': 'video',
              'fullScreenMusic': 'music',
              'fullScreenPhoto': 'photo'}
+
 
 class RemoteRequestHandler(BaseHTTPRequestHandler):
 
@@ -52,7 +53,7 @@ class RemoteServer(HTTPServer):
 class Remote(object):
     """A remote control for a Plex device.
 
-    Basic Usage::
+    Usage (subscribe method)::
 
       >>> import plexdevices
       >>> s = plexdevices.Session(user=username, password=password)
@@ -63,10 +64,15 @@ class Remote(object):
       >>> r.down()
       >>> r.select()
       >>> r.timeline_unsubscribe()
+
+    Usage (poll method)::
+
+      >>> r = plexdevices.Remote(player=player)
+      >>> r.timeline_poll()
+      >>> r.down()
+      >>> r.select()
     """
     def __init__(self, player, name, port=8000):
-        if PROVIDES['PLAYER'] not in player.provides:
-            raise ProvidesError(PROVIDES['PLAYER'], player.provides)
         self.identifier = str(uuid.uuid5(uuid.NAMESPACE_DNS, name))
         self.name = name
         self.command_id = 0
@@ -149,7 +155,7 @@ class Remote(object):
             return
         self._start_server()
         self.command('/player/timeline/subscribe', {
-            'protocol':'http',
+            'protocol': 'http',
             'port': self.port
         })
         self.subscribed = True
@@ -180,11 +186,9 @@ class Remote(object):
         t = self.timeline()
         return t is not None and t['location'] != 'navigation'
 
-    def mirror(self, media_object, **kwargs):
-        """Send the player to the preplay screen of the given :class:`MediaObject <MediaObject>`."""
-        server, key = media_object.parent.server, media_object['key']
-        if PROVIDES['SERVER'] not in server.provides:
-            raise ProvidesError(PROVIDES['SERVER'], server.provides)
+    def mirror(self, plex_object, **kwargs):
+        """Send the player to the preplay screen of the given :class:`BaseObject <BaseObject>`."""
+        server, key = plex_object.parent.server, plex_object['key']
         self.command('/player/mirror/details', {
             'key': key,
             'machineIdentifier': server.client_identifier,
@@ -196,33 +200,13 @@ class Remote(object):
             'commandID': self.command_id
         })
 
-    def play_media(self, media_object, mtype='video'):
+    def play_media(self, media_object):
         """Make the player play the given :class:`MediaObject <MediaObject>`."""
         server, key = media_object.parent.server, media_object['key']
-        if PROVIDES['SERVER'] not in server.provides:
-            raise ProvidesError(PROVIDES['SERVER'], server.provides)
         headers = self.headers
-        headers.update({
-            'X-Plex-Target-Client-Identifier': self.player.client_identifier,
-            'X-Plex-Token': server.access_token,
-            'Accept': 'application/json'
-        })
-        if mtype in ['track', 'album']:
-            media = 'music'
-        elif mtype in ['episode', 'season', 'movie', 'video']:
-            media = 'video'
-        elif mtype == 'photo':
-            media = 'photo'
-        elif mtype == 'mixed':
-            media = 'video'
-        # make a playQueue on `server`
-        uri = 'library://{}/directory/{}'.format(
-            headers['X-Plex-Client-Identifier'], key)
-        code, data = server.request('/playQueues', requests.post,
-                                    headers=headers,
-                                    params={'type': media, 'uri': uri})
-        # extract playQueueID from response
-        pqid = json.loads(data).get('playQueueID', 0)
+        headers['X-Plex-Target-Client-Identifier'] = self.player.client_identifier
+        play_queue = PlayQueue.create(server, media_object, headers)
+        pqid = play_queue['playQueueID']
         self.command('/player/playback/playMedia', {
             'key': key,
             'machineIdentifier': server.client_identifier,
@@ -230,7 +214,7 @@ class Remote(object):
             'port': server.active.port,
             'protocol': server.active.protocol,
             'token': server.access_token,
-            'offset': 0,
+            'offset': media_object['viewOffset'] if media_object.in_progress else 0,
             'containerKey': '/playQueues/{}?own=1&window=200'.format(pqid),
             'commandID': self.command_id
         })

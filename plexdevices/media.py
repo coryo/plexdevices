@@ -1,22 +1,35 @@
 import logging
 from .packages import requests
-from .compat import quote, json
+from .compat import quote, json, iteritems
+from .utils import *
+from .types import *
 log = logging.getLogger(__name__)
 
 
 class MediaContainer(object):
-    """An object representing a Plex MediaContainer.
-    """
+    """An object representing a Plex MediaContainer."""
 
     def __init__(self, server, data):
         #: Dictionary of the MediaContainer's values.
         self.data = data
+
         #: The :class:`Device <Device>` which this container was retrieved from.
         self.server = server
-        #: List of :class:`MediaObject <MediaObject>`'s in the container.
-        self.children = ([MediaObject(child, self)
-                         for child in data['_children']] if '_children' in data
-                         else [])
+        #: List of :class:`BaseObject <BaseObject>`'s in the container.
+        if '_children' in data:
+            #: List of :class:`BaseObject <BaseObject>`'s in the container.
+            self.children = ([self._parse_type(child)(child, self)
+                              for child in data['_children']])
+            del self.data['_children']
+        else:
+            self.children = []
+
+    def _parse_type(self, item):
+        if item['_elementType'] == 'Directory':
+            return DirectoryObject
+        elif item['_elementType'] in ['Video', 'Track', 'Photo']:
+            return MediaObject
+        return BaseObject
 
     def __getitem__(self, key):
         return self.data[key]
@@ -42,8 +55,7 @@ class MediaContainer(object):
 
 
 class PlayQueue(MediaContainer):
-    """An object representing a Plex PlayQueue.
-    """
+    """An object representing a Plex PlayQueue."""
 
     def __init__(self, server, data):
         super(PlayQueue, self).__init__(server, data)
@@ -51,7 +63,7 @@ class PlayQueue(MediaContainer):
 
     @property
     def selected_item(self):
-        """The selected :class:`MediaObject <MediaObject>`"""
+        """The selected :class:`BaseObject <BaseObject>`"""
         try:
             return self.children[int(self['playQueueSelectedItemOffset'])]
         except Exception:
@@ -71,21 +83,21 @@ class PlayQueue(MediaContainer):
         return item
 
     def get_next(self):
-        """Return the next :class:`MediaObject <MediaObject>` in the PlayQueue, or `None`."""
+        """Return the next :class:`BaseObject <BaseObject>` in the PlayQueue, or `None`."""
         if self.selected_item is None:
             return None
         i = self.children.index(self.selected_item) + 1
         return self.select(self.children[i]) if 0 <= i <= len(self) - 1 else None
 
     def get_prev(self):
-        """Return the previous :class:`MediaObject <MediaObject>` in the PlayQueue, or `None`."""
+        """Return the previous :class:`BaseObject <BaseObject>` in the PlayQueue, or `None`."""
         if self.selected_item is None:
             return None
         i = self.children.index(self.selected_item) - 1
         return self.select(self.children[i]) if 0 <= i <= len(self) - 1 else None
 
     def remove_item(self, item):
-        """Remove a :class:`MediaObject <MediaObject>` to the PlayQueue.
+        """Remove a :class:`BaseObject <BaseObject>` to the PlayQueue.
         """
         url = '/playQueues/{}/items/{}'.format(self['playQueueID'],
                                                item['playQueueItemID'])
@@ -97,7 +109,7 @@ class PlayQueue(MediaContainer):
             log.error('playqueue: could not remove item from playqueue.')
 
     def add_item(self, media_object, player_headers):
-        """Add a :class:`MediaObject <MediaObject>` to the PlayQueue.
+        """Add a :class:`BaseObject <BaseObject>` to the PlayQueue.
         """
         headers = self.server.headers
         headers['Accept'] = 'application/json'
@@ -114,21 +126,25 @@ class PlayQueue(MediaContainer):
 
     @staticmethod
     def media_uri(media_object, player_headers):
-        if 'type' not in media_object:
-            media = 'video'
+        if isinstance(media_object, DirectoryObject):
+            item_type = 'directory'
         else:
-            if media_object['type'] in ['track', 'album']:
-                media = 'music'
-            elif media_object['type'] in ['episode', 'season', 'movie',
-                                          'video', 'clip']:
-                media = 'video'
-            elif media_object['type'] == 'photo':
-                media = 'photo'
-            else:
-                media = 'video'
+            item_type = 'item'
+
+        if media_object.type in [PlexType.TRACK, PlexType.ALBUM]:
+            media = 'music'
+        elif media_object.type in [PlexType.EPISODE, PlexType.SEASON,
+                                   PlexType.MOVIE, PlexType.CLIP,
+                                   PlexType.SHOW, PlexType.TRAILER]:
+            media = 'video'
+        elif media_object.type in [PlexType.PHOTO, PlexType.PICTURE]:
+            media = 'photo'
+        else:
+            media = 'video'
+
         uri = 'library://{}/{}/{}'.format(
             player_headers['X-Plex-Client-Identifier'],
-            'directory' if media_object.is_directory else 'item',
+            item_type,
             quote(media_object['key'], safe=''))
         return (media, uri)
 
@@ -137,7 +153,7 @@ class PlayQueue(MediaContainer):
         """Create a PlayQueue on a server and return a PlayQueue object.
 
         :param server: the :class:`Device <Device>` to create the PlayQueue on.
-        :param media_object: the :class:`MediaObject <MediaObject>` to be the initial item added to the PlayQueue.
+        :param media_object: the :class:`BaseObject <BaseObject>` to be the initial item added to the PlayQueue.
         :param player_headers: Dictionary of headers identifying the player using the PlayQueue. Must include X-Plex-Client-Identifier and X-Plex-Device-Name.
         :return: :class:`PlayQueue <PlayQueue>` object
         :rtype: plexdevices.PlayQueue
@@ -156,9 +172,7 @@ class PlayQueue(MediaContainer):
         return PlayQueue(server, server.container('/playQueues/{}'.format(pqid)))
 
 
-class MediaObject(object):
-    """An object representing a Plex MediaObject.
-    """
+class BaseObject(object):
 
     def __init__(self, data, parent):
         #: Dictionary of the item's values.
@@ -167,7 +181,7 @@ class MediaObject(object):
         self.parent = parent
 
     def __getitem__(self, key):
-        """Get values of the MediaObjects data."""
+        """Get values of the BaseObjects data."""
         return self.data[key]
 
     def __setitem__(self, key, value):
@@ -184,6 +198,89 @@ class MediaObject(object):
 
     def follow_key(self):
         return self.parent.server.container(self['key'])
+
+    @property
+    def has_parent(self):
+        return 'parentKey' in self
+
+    @property
+    def has_grandparent(self):
+        return 'grandparentKey' in self
+
+    @property
+    def parent_name(self):
+        """String. The name of the parent of this item. (Artist, Album, Season, etc..)."""
+        media = self['type']
+        if media == 'album':
+            return 'Artist'
+        elif media == 'track':
+            return 'Album'
+        elif media == 'season':
+            return 'Show'
+        elif media == 'episode':
+            return 'Season'
+        elif media == 'photo':
+            return 'Album'
+        else:
+            return 'Parent'
+
+    @property
+    def grandparent_name(self):
+        """String. The name of the grandparent of this item."""
+        media = self['type']
+        if media == 'track':
+            return 'Artist'
+        elif media == 'episode':
+            return 'Show'
+        else:
+            return 'Grandparent'
+
+
+class MediaObject(BaseObject):
+    """An object representing a piece of Media."""
+
+    def __init__(self, data, parent):
+        super(MediaObject, self).__init__(data, parent)
+        mtype = data.get('type', 'none')
+        #: The :class:`PlexType <PlexType>`.
+        self.type = get_type(mtype)
+
+    def __repr__(self):
+        return '<{}:{}>'.format(self.__class__.__name__, get_type_string(self.type))
+
+    @property
+    def markable(self):
+        return (self.type in [PlexType.MOVIE,
+                              PlexType.SHOW,
+                              PlexType.SEASON,
+                              PlexType.EPISODE,
+                              PlexType.TRACK,
+                              PlexType.CLIP] and
+                self.parent.is_library)
+
+    @property
+    def in_progress(self):
+        """``True`` if the item is in progress."""
+        return 'viewOffset' in self
+
+    @property
+    def watched(self):
+        """``True`` if the item is watched."""
+        return 'lastViewedAt' in self and not self.in_progress
+
+    def mark_watched(self):
+        """Mark this item as watched on its server."""
+        self.parent.server.request('/:/scrobble', params={
+            'key': self['ratingKey'],
+            'identifier': self.parent['identifier'],
+        })
+
+    def mark_unwatched(self):
+        """Mark this item as unwatched on its server."""
+        self.parent.server.request('/:/unscrobble', params={
+            'key': self['ratingKey'],
+            'identifier': self.parent['identifier'],
+        })
 
     def get_all_keys(self):
         """Return a list of tuples of (height, key) for each key in the item.
@@ -225,110 +322,20 @@ class MediaObject(object):
         key = parts[0]
         return self.resolve_key(key)
 
-    def mark_watched(self):
-        """Mark this item as watched on its server."""
-        self.parent.server.request('/:/scrobble', params={
-            'key': self['ratingKey'],
-            'identifier': self.parent['identifier'],
-        })
 
-    def mark_unwatched(self):
-        """Mark this item as unwatched on its server."""
-        self.parent.server.request('/:/unscrobble', params={
-            'key': self['ratingKey'],
-            'identifier': self.parent['identifier'],
-        })
+class DirectoryObject(BaseObject):
+    """An object representing a Directory."""
 
-    @property
-    def markable(self):
-        """``True`` if the item can be marked watched/unwatched."""
-        return (self.is_audio or self.is_video) and self.parent.is_library
-
-    @property
-    def is_video(self):
-        """``True`` if the item is video."""
-        return self['_elementType'] == 'Video'
-
-    @property
-    def is_audio(self):
-        """``True`` if the item is audio."""
-        return self['_elementType'] == 'Track'
-
-    @property
-    def is_photo(self):
-        """``True`` if the item is a photo."""
-        return self['_elementType'] == 'Photo'
-
-    @property
-    def is_directory(self):
-        """``True`` if the item is a directory."""
-        return self['_elementType'] == 'Directory'
-
-    @property
-    def is_album(self):
-        """``True`` if the item is a audio album."""
-        return self.is_directory and self.get('type', None) == 'album'
-
-    @property
-    def is_photo_album(self):
-        """``True`` if the item is a photo album."""
-        return (self.is_directory and
-                self.get('type', None) == 'photoalbum' or
-                (self.get('type', None) == 'photo' and
-                 self.get('index', 0) == 1))
-
-    @property
-    def is_input(self):
-        """``True`` if the item is an InputDirectoryObject."""
-        return int(self.get('search', 0)) == 1
-
-    @property
-    def is_settings(self):
-        """``True`` if the item is a PrefsObject."""
-        return int(self.get('settings', 0)) == 1
-
-    @property
-    def has_parent(self):
-        return 'parentKey' in self
-
-    @property
-    def has_grandparent(self):
-        return 'grandparentKey' in self
-
-    @property
-    def in_progress(self):
-        """``True`` if the item is in progress."""
-        return 'viewOffset' in self
-
-    @property
-    def watched(self):
-        """``True`` if the item is watched."""
-        return 'lastViewedAt' in self and not self.in_progress
-
-    @property
-    def parent_name(self):
-        """String. The name of the parent of this item. (Artist, Album, Season, etc..)."""
-        media = self['type']
-        if media == 'album':
-            return 'Artist'
-        elif media == 'track':
-            return 'Album'
-        elif media == 'season':
-            return 'Show'
-        elif media == 'episode':
-            return 'Season'
-        elif media == 'photo':
-            return 'Album'
+    def __init__(self, data, parent):
+        super(DirectoryObject, self).__init__(data, parent)
+        if 'settings' in data:
+            dtype = 'prefs'
+        elif 'search' in data:
+            dtype = 'input'
         else:
-            return 'Parent'
+            dtype = data.get('type', 'unknown')
+        #: The :class:`PlexType <PlexType>`.
+        self.type = get_type(dtype)
 
-    @property
-    def grandparent_name(self):
-        """String. The name of the grandparent of this item."""
-        media = self['type']
-        if media == 'track':
-            return 'Artist'
-        elif media == 'episode':
-            return 'Show'
-        else:
-            return 'Grandparent'
+    def __repr__(self):
+        return '<{}:{}>'.format(self.__class__.__name__, get_type_string(self.type))

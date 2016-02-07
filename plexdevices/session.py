@@ -3,9 +3,8 @@ import xml.etree.ElementTree as ET
 import uuid
 from .packages import requests
 from .compat import json
-from .device import Device
+from .device import Device, Server, Player, create_device
 from .exceptions import PlexTVError
-from .constants import *
 from .utils import *
 log = logging.getLogger(__name__)
 
@@ -36,6 +35,7 @@ class Session(object):
         self.players = []
         #: List of Plex Home users.
         self.users = []
+        self._last_devices, self._last_users = None, None
 
         if user is not None and password is not None:
             self.login(password)
@@ -71,23 +71,47 @@ class Session(object):
             log.error('Response: %d - %s' % (res.status_code, res.text))
             raise PlexTVError(res.status_code)
 
+        self._last_devices = res.text
+        self._refresh_devices(res.text)
+
+    def _refresh_devices(self, data):
         try:
-            xml = ET.fromstring(res.text).getchildren()
+            xml = ET.fromstring(data).getchildren()
         except Exception:
             log.error('Response: %d - %s' % (res.status_code, res.text))
             raise PlexTVError(res.text)
         else:
             for item in xml:
                 if item.tag == 'error':
-                    log.error('Response: %d - %s' % (res.status_code, item.text))
+                    log.error('Response: %s' % item.text)
                     raise PlexTVError(item.text)
                 elif item.tag == 'Device':
-                    device = Device(item)
+                    device = create_device(item)
+                    log.debug(device)
                     self._devices.append(device)
-                    if PROVIDES['SERVER'] in device.provides:
+                    if isinstance(device, Server):
                         self.servers.append(device)
-                    elif PROVIDES['PLAYER'] in device.provides:
+                    elif isinstance(device, Player):
                         self.players.append(device)
+
+    def dump(self):
+        """Dump the session to a json string. It can be stored on disk and loaded with load() to prevent needed to connect to plex.tv."""
+        session = {'user': self.user,
+                   'token': self.token,
+                   'identifier': self.identifier,
+                   'devices': self._last_devices,
+                   'users': self._last_users}
+        return json.dumps(session)
+
+    @staticmethod
+    def load(session_json):
+        """Load a session that has been dumped with dump()."""
+        data = json.loads(session_json)
+        session = Session(user=data['user'], token=data['token'])
+        session._refresh_devices(data['devices'])
+        session._refresh_users(data['users'])
+        session.identifier = data['identifier']
+        return session
 
     def login(self, password):
         """Retrieve the token for the session user from ``https://plex.tv/users/sign_in.json.``"""
@@ -122,11 +146,19 @@ class Session(object):
         """Retrieve the Plex Home users from ``https://plex.tv/api/home/users``."""
         try:
             res = requests.get('https://plex.tv/api/home/users', headers=self.headers)
-            xml = ET.fromstring(res.text)
+        except Exception as e:
+            raise PlexTVError(str(e))
+        else:
+            self._last_users = res.text
+            self._refresh_users(res.text)
+
+    def _refresh_users(self, data):
+        try:
+            xml = ET.fromstring(data)
             data = parse_xml(xml)
             self.users = data['_children']
         except Exception as e:
-            raise PlexTVError(str(e))
+            log.error('refresh users {}'.format(str(e)))
 
     def switch_user(self, user_id, pin=None):
         """Switch the current user to the given user id, and refresh the available devices.

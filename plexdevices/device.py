@@ -3,18 +3,45 @@ from .packages import requests
 import shutil
 import xml.etree.ElementTree as ET
 from .compat import json, quote
-from .exceptions import ProvidesError, DeviceConnectionsError
-from .constants import *
+from .exceptions import DeviceConnectionsError
 from .media import MediaContainer, PlayQueue
 from .utils import *
 log = logging.getLogger(__name__)
 
 
-class Device(object):
-    """A Plex device.
-    """
+# from six, for py2/3 compaitibility
+def with_metaclass(meta, base=object):
+    return meta("NewBase", (base,), {})
 
-    def __init__(self, data):
+
+def create_device(data):
+    """Create a Device object and mixin the functionality it provides."""
+    provides = data.get('provides').split(',')
+    mixins = tuple([_provides_mixins(p) for p in provides])
+    return Device(data, mixins=mixins)
+
+
+def _provides_mixins(provides):
+    return {
+        'server': Server,
+        'player': Player,
+    }[provides]
+
+
+class DynamicInheritance(type):
+    def __call__(cls, *args, **kwargs):
+        mixins = kwargs.pop("mixins", None)
+        if mixins:
+            assert isinstance(mixins, tuple)
+            new_cls = type(cls.__name__, mixins + (cls,), {})
+            return super(DynamicInheritance, new_cls).__call__(*args, **kwargs)
+        return super(DynamicInheritance, cls).__call__(*args, **kwargs)
+
+
+class Device(with_metaclass(DynamicInheritance)):
+
+    def __init__(self, *args, **kwargs):
+        data = args[0]
         self.name = data.get('name')
         self.product = data.get('product')
         self.product_version = data.get('productVersion')
@@ -58,9 +85,9 @@ class Device(object):
 
     def request(self, endpoint, method=requests.get, data=None, params=None,
                 headers={}, raw=False, allow_redirects=True):
-        """Make a request to the device.
+        """Make an HTTP request to the device.
 
-        :param endpoint: location on server.
+        :param endpoint: location on server. e.g. ``/library/onDeck``.
         :param method: (optional) request function. Defaults to ``requests.get``.
         :param data: (optional) data to send with the request. Defaults to ``None``.
         :param params: (optional) params to include in the URL. Defaults to ``None``.
@@ -98,18 +125,20 @@ class Device(object):
             else:
                 return (res.status_code, res.content if raw else res.text)
 
+
+class Server(Device):
+    """A Plex device which provides a server."""
+
     def container(self, endpoint, size=None, page=None, params=None,
                   usejson=True, allow_redirects=True):
-        """Returns a dict representing a plex media container from a server device.
-
-        :param endpoint: destination on the server. (ie /library/sections).
+        """
+        :param endpoint: destination on the server. e.g. ``/library/onDeck``.
         :param size: (optional) the max number of items to retrieve.
         :param page: (optional) the page number for paging large containers.
         :param params: (optional) Dictionary of parameters to be added to the url in the request.
+        :return: a Dictionary representing a Plex Media Container.
         :rtype: Dictionary
         """
-        if PROVIDES['SERVER'] not in self.provides:
-            raise ProvidesError(PROVIDES['SERVER'], self.provides)
         headers = self.headers
         if usejson:
             headers['Accept'] = 'application/json'
@@ -139,32 +168,28 @@ class Device(object):
 
     def media_container(self, endpoint, size=None, page=None, params=None,
                         usejson=True):
-        """Returns a :class:`MediaContainer <MediaContainer>` from a server device.
-
-        :param endpoint: destination on the server. (ie /library/sections).
+        """
+        :param endpoint: destination on the server. e.g. ``/library/onDeck``.
         :param size: (optional) the max number of items to retrieve.
         :param page: (optional) the page number for paging large containers.
         :param params: (optional) Dictionary of parameters to be added to the url in the request.
-        :return: :class:`MediaContainer <MediaContainer>` object
-        :rtype: plexdevices.MediaContainer
+        :return: a :class:`MediaContainer <MediaContainer>` representing a Plex Media Container.
+        :rtype: :class:`MediaContainer <MediaContainer>`
         """
         return MediaContainer(self, self.container(endpoint, size, page,
                                                    params, usejson))
 
     def image(self, endpoint, w=None, h=None):
-        """Returns the raw data of an image from a server device. If w and h are set,
-        the server will transcode the image to the given size.
+        """If w and h are set, the server will transcode the image to the given size.
 
         :param endpoint: location of the image. This can also be a full URL of an image not on the server (for easy channel support).
         :param w: (optional) width to transcode.
         :param h: (optional) height to transcode.
+        :return: Raw data of an image.
         """
         if endpoint.startswith('http'):
             res = requests.get(endpoint)
             return res.content
-
-        if PROVIDES['SERVER'] not in self.provides:
-            raise ProvidesError(PROVIDES['SERVER'], self.provides)
 
         endpoint, params = (
             (endpoint, None) if w is None or h is None else
@@ -175,9 +200,13 @@ class Device(object):
         return res
 
 
+class Player(Device):
+    """A Plex device which provides a player."""
+    pass
+
+
 class Connection(object):
-    """A Plex device connection.
-    """
+    """A Plex device connection."""
 
     def __init__(self, data):
         #: http or https.
