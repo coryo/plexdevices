@@ -2,16 +2,11 @@ import logging
 from .packages import requests
 import shutil
 import xml.etree.ElementTree as ET
-from .compat import json, quote
+from .compat import json, quote, with_metaclass
 from .exceptions import DeviceConnectionsError
 from .media import MediaContainer, PlayQueue
 from .utils import *
 log = logging.getLogger(__name__)
-
-
-# from six, for py2/3 compaitibility
-def with_metaclass(meta, base=object):
-    return meta("NewBase", (base,), {})
 
 
 def create_device(data):
@@ -29,52 +24,114 @@ def _provides_mixins(provides):
 
 
 class DynamicInheritance(type):
-    def __call__(cls, *args, **kwargs):
-        mixins = kwargs.pop("mixins", None)
+    def __call__(cls, data, mixins):
         if mixins:
             assert isinstance(mixins, tuple)
             new_cls = type(cls.__name__, mixins + (cls,), {})
-            return super(DynamicInheritance, new_cls).__call__(*args, **kwargs)
-        return super(DynamicInheritance, cls).__call__(*args, **kwargs)
+            return super(DynamicInheritance, new_cls).__call__(data)
+        return super(DynamicInheritance, cls).__call__(data)
 
 
 class Device(with_metaclass(DynamicInheritance)):
 
-    def __init__(self, *args, **kwargs):
-        data = args[0]
-        self.name = data.get('name')
-        self.product = data.get('product')
-        self.product_version = data.get('productVersion')
-        self.platform = data.get('platform')
-        self.platform_version = data.get('platformVersion')
-        self.device = data.get('device')
-        #: Unique identifier for the device.
-        self.client_identifier = data.get('clientIdentifier')
-        self.created_at = data.get('createdAt')
-        self.last_seen_at = data.get('lastSeenAt')
-        #: List of what the device is. (server, player)
-        self.provides = data.get('provides').split(',')
-        self.access_token = data.get('accessToken')
-        self.owned = bool(int(data.get('owned')))
-        self.public_address_matches = bool(
-            int(data.get('publicAddressMatches')))
-        self.presence = bool(int(data.get('presence')))
-        self.synced = bool(int(data.get('synced', '0')))
-        self.https_required = bool(int(data.get('httpsRequired', '0')))
-        #: List of :class:`Connection <Connection>` objects.
-        self.connections = [Connection(conn) for conn in data.getchildren()]
-        #: The active :class:`Connection <Connection>`.
+    def __init__(self, data):
+        self.data = data
+        self.connections = [Connection(conn) for conn in data['_children']]
         self.active = None
+
+    @property
+    def name(self):
+        """ """
+        return self.data.get('name')
+
+    @property
+    def product(self):
+        """ """
+        return self.data.get('product')
+
+    @property
+    def product_version(self):
+        """ """
+        return self.data.get('productVersion')
+
+    @property
+    def platform(self):
+        """ """
+        return self.data.get('platform')
+
+    @property
+    def platform_version(self):
+        """ """
+        return self.data.get('platformVersion')
+
+    @property
+    def device(self):
+        """ """
+        return self.data.get('device')
+
+    @property
+    def client_identifier(self):
+        """ """
+        return self.data.get('clientIdentifier')
+
+    @property
+    def created_at(self):
+        """ """
+        return self.data.get('createdAt')
+
+    @property
+    def last_seen_at(self):
+        """ """
+        return self.data.get('lastSeenAt')
+
+    @property
+    def provides(self):
+        """:type: list"""
+        return self.data.get('provides').split(',')
+
+    @property
+    def access_token(self):
+        """ """
+        return self.data.get('accessToken')
+
+    @property
+    def owned(self):
+        """:type: bool"""
+        return bool(int(self.data.get('owned', '0')))
+
+    @property
+    def public_address_matches(self):
+        """:type: bool"""
+        return bool(int(self.data.get('publicAddressMatches', '0')))
+
+    @property
+    def presence(self):
+        """:type: bool"""
+        return bool(int(self.data.get('presence', '0')))
+
+    @property
+    def synced(self):
+        """:type: bool"""
+        return bool(int(self.data.get('synced', '0')))
+
+    @property
+    def https_required(self):
+        """:type: bool"""
+        return bool(int(self.data.get('httpsRequired', '0')))
+
+    @property
+    def headers(self):
+        """ """
+        return {'X-Plex-Token': self.access_token}
+
+    def __reduce__(self):
+        return (Device, (self.data, tuple([_provides_mixins(p) for p in self.provides])))
 
     def __repr__(self):
         return '<{}:{} - {}>'.format(self.__class__.__name__, self.name,
                                      self.product)
 
-    @property
-    def headers(self):
-        return {'X-Plex-Token': self.access_token}
-
-    def active_connection(self):
+    def _active_connection(self):
         """Test the connections. Return the working one if possible."""
         for conn in self.connections:
             if conn.test(self.access_token, secure=self.https_required):
@@ -98,7 +155,7 @@ class Device(with_metaclass(DynamicInheritance)):
         :rtype: Tuple (int, str)
         """
         if self.active is None:
-            self.active_connection()
+            self._active_connection()
             if self.active is None:
                 log.error('request: unable to get an active connection.')
                 raise DeviceConnectionsError(self)
@@ -127,7 +184,7 @@ class Device(with_metaclass(DynamicInheritance)):
 
 
 class Server(Device):
-    """A Plex device which provides a server."""
+    """A :class:`Device <Device>` which provides a server."""
 
     def container(self, endpoint, size=None, page=None, params=None,
                   usejson=True, allow_redirects=True):
@@ -167,7 +224,7 @@ class Server(Device):
             return data
 
     def media_container(self, endpoint, size=None, page=None, params=None,
-                        usejson=True):
+                        usejson=True, allow_redirects=True):
         """
         :param endpoint: destination on the server. e.g. ``/library/onDeck``.
         :param size: (optional) the max number of items to retrieve.
@@ -176,8 +233,12 @@ class Server(Device):
         :return: a :class:`MediaContainer <MediaContainer>` representing a Plex Media Container.
         :rtype: :class:`MediaContainer <MediaContainer>`
         """
-        return MediaContainer(self, self.container(endpoint, size, page,
-                                                   params, usejson))
+        data = self.container(endpoint, size, page, params, usejson,
+                              allow_redirects)
+        if isinstance(data, str):
+            return data
+        else:
+            return MediaContainer(self, data)
 
     def image(self, endpoint, w=None, h=None):
         """If w and h are set, the server will transcode the image to the given size.
@@ -193,7 +254,7 @@ class Server(Device):
 
         endpoint, params = (
             (endpoint, None) if w is None or h is None else
-            ('/photo/:/transcode', {'url': self.active.url + endpoint,
+            ('/photo/:/transcode', {'url': endpoint,
                                     'width': w, 'height': h, 'maxSize': 1}))
         code, res = self.request(endpoint, headers=self.headers, params=params,
                                  raw=True)
@@ -201,7 +262,7 @@ class Server(Device):
 
 
 class Player(Device):
-    """A Plex device which provides a player."""
+    """A :class:`Device <Device>` which provides a player."""
     pass
 
 
@@ -209,19 +270,31 @@ class Connection(object):
     """A Plex device connection."""
 
     def __init__(self, data):
-        #: http or https.
-        self.protocol = data.get('protocol')
-        #: base address.
-        self.address = data.get('address')
-        #: port number.
-        self.port = data.get('port')
-        #: uri provided by plex.
-        self.uri = data.get('uri')
-        self.local = bool(int(data.get('local')))
+        self.data = data
         #: indicator of whether the connection is active or not.
         self.active = False
         #: uri set by test()
         self.url = None
+
+    @property
+    def protocol(self):
+        return self.data.get('protocol')
+
+    @property
+    def address(self):
+        return self.data.get('address')
+
+    @property
+    def port(self):
+        return self.data.get('port')
+
+    @property
+    def uri(self):
+        return self.data.get('uri')
+
+    @property
+    def local(self):
+        return bool(int(self.data.get('local')))
 
     def __repr__(self):
         return '<{}:{}>'.format(self.__class__.__name__, self.uri)

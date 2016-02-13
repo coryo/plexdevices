@@ -188,7 +188,7 @@ class Remote(object):
 
     def mirror(self, plex_object, **kwargs):
         """Send the player to the preplay screen of the given :class:`BaseObject <BaseObject>`."""
-        server, key = plex_object.parent.server, plex_object['key']
+        server, key = plex_object.container.server, plex_object.key
         self.command('/player/mirror/details', {
             'key': key,
             'machineIdentifier': server.client_identifier,
@@ -201,12 +201,12 @@ class Remote(object):
         })
 
     def play_media(self, media_object):
-        """Make the player play the given :class:`MediaObject <MediaObject>`."""
-        server, key = media_object.parent.server, media_object['key']
+        """Make the player play the given :class:`MediaItem <MediaItem>`."""
+        server, key = media_object.container.server, media_object.key
         headers = self.headers
         headers['X-Plex-Target-Client-Identifier'] = self.player.client_identifier
         play_queue = PlayQueue.create(server, media_object, headers)
-        pqid = play_queue['playQueueID']
+        pqid = play_queue.id
         self.command('/player/playback/playMedia', {
             'key': key,
             'machineIdentifier': server.client_identifier,
@@ -214,7 +214,7 @@ class Remote(object):
             'port': server.active.port,
             'protocol': server.active.protocol,
             'token': server.access_token,
-            'offset': media_object['viewOffset'] if media_object.in_progress else 0,
+            'offset': media_object.view_offset if media_object.in_progress else 0,
             'containerKey': '/playQueues/{}?own=1&window=200'.format(pqid),
             'commandID': self.command_id
         })

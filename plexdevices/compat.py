@@ -69,3 +69,8 @@ try:
     iteritems = dict.iteritems
 except AttributeError:
     iteritems = dict.items
+
+
+# from six
+def with_metaclass(meta, base=object):
+    return meta("NewBase", (base,), {})

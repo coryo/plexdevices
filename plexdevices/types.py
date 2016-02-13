@@ -108,65 +108,82 @@ class PlexType(object):
 
 
 def get_type(type_str):
-    return {
-        'unknown': PlexType.UNKNOWN,
-        'movie': PlexType.MOVIE,
-        'show': PlexType.SHOW,
-        'season': PlexType.SEASON,
-        'episode': PlexType.EPISODE,
-        'artist': PlexType.ARTIST,
-        'album': PlexType.ALBUM,
-        'song': PlexType.TRACK,
-        'photo': PlexType.PHOTO,
-        'video': PlexType.VIDEO,
-        'directory': PlexType.DIRECTORY,
-        'section': PlexType.SECTION,
-        'server': PlexType.SERVER,
-        'device': PlexType.DEVICE,
-        'syncitem': PlexType.SYNCITEM,
-        'mediasettings': PlexType.MEDIASETTINGS,
-        'policy': PlexType.POLICY,
-        'location': PlexType.LOCATION,
-        'media': PlexType.MEDIA,
-        'part': PlexType.PART,
-        'syncitems': PlexType.SYNCITEMS,
-        'stream': PlexType.STREAM,
-        'status': PlexType.STATUS,
-        'transcodejob': PlexType.TRANSCODEJOB,
-        'transcodesession': PlexType.TRANSCODESESSION,
-        'provider': PlexType.PROVIDER,
-        'clip': PlexType.CLIP,
-        'playlist': PlexType.PLAYLIST,
-        'channel': PlexType.CHANNEL,
-        'secondary': PlexType.SECONDARY,
-        'genre': PlexType.GENRE,
-        'role': PlexType.ROLE,
-        'writer': PlexType.WRITER,
-        'producer': PlexType.PRODUCER,
-        'country': PlexType.COUNTRY,
-        'director': PlexType.DIRECTOR,
-        'thumb': PlexType.THUMB,
-        'image': PlexType.IMAGE,
-        'plugin': PlexType.CHANNELS,
-        'user': PlexType.USER,
-        'release': PlexType.RELEASE,
-        'package': PlexType.PACKAGE,
-        'photoalbum': PlexType.PHOTOALBUM,
-        'input': PlexType.INPUT,
-        'prefs': PlexType.PREFERENCES,
-        'trailer': PlexType.TRAILER,
-        'picture': PlexType.PICTURE,
-        'playlistitem': PlexType.PLAYLISTITEM,
-        'track': PlexType.TRACK,
-        'comic': PlexType.COMIC,
-        'none': PlexType.NONE,
-        'person': PlexType.PERSON,
-    }[type_str]
+    try:
+        return {
+            'unknown': PlexType.UNKNOWN,
+            'movie': PlexType.MOVIE,
+            'show': PlexType.SHOW,
+            'season': PlexType.SEASON,
+            'episode': PlexType.EPISODE,
+            'artist': PlexType.ARTIST,
+            'album': PlexType.ALBUM,
+            'song': PlexType.TRACK,
+            'photo': PlexType.PHOTO,
+            'video': PlexType.VIDEO,
+            'directory': PlexType.DIRECTORY,
+            'section': PlexType.SECTION,
+            'server': PlexType.SERVER,
+            'device': PlexType.DEVICE,
+            'syncitem': PlexType.SYNCITEM,
+            'mediasettings': PlexType.MEDIASETTINGS,
+            'policy': PlexType.POLICY,
+            'location': PlexType.LOCATION,
+            'media': PlexType.MEDIA,
+            'part': PlexType.PART,
+            'syncitems': PlexType.SYNCITEMS,
+            'stream': PlexType.STREAM,
+            'status': PlexType.STATUS,
+            'transcodejob': PlexType.TRANSCODEJOB,
+            'transcodesession': PlexType.TRANSCODESESSION,
+            'provider': PlexType.PROVIDER,
+            'clip': PlexType.CLIP,
+            'playlist': PlexType.PLAYLIST,
+            'channel': PlexType.CHANNEL,
+            'secondary': PlexType.SECONDARY,
+            'genre': PlexType.GENRE,
+            'role': PlexType.ROLE,
+            'writer': PlexType.WRITER,
+            'producer': PlexType.PRODUCER,
+            'country': PlexType.COUNTRY,
+            'director': PlexType.DIRECTOR,
+            'thumb': PlexType.THUMB,
+            'image': PlexType.IMAGE,
+            'plugin': PlexType.CHANNELS,
+            'user': PlexType.USER,
+            'release': PlexType.RELEASE,
+            'package': PlexType.PACKAGE,
+            'photoalbum': PlexType.PHOTOALBUM,
+            'input': PlexType.INPUT,
+            'prefs': PlexType.PREFERENCES,
+            'trailer': PlexType.TRAILER,
+            'picture': PlexType.PICTURE,
+            'playlistitem': PlexType.PLAYLISTITEM,
+            'track': PlexType.TRACK,
+            'comic': PlexType.COMIC,
+            'none': PlexType.NONE,
+            'person': PlexType.PERSON,
+        }[type_str]
+    except KeyError:
+        return PlexType.UNKNOWN
+
+
+def get_parent_type(plex_type):
+    try:
+        return {
+            PlexType.TRACK: PlexType.ALBUM,
+            PlexType.EPISODE: PlexType.SEASON,
+            PlexType.SEASON: PlexType.SHOW,
+            PlexType.ALBUM: PlexType.ARTIST,
+            PlexType.PHOTO: PlexType.PHOTOALBUM,
+            PlexType.PHOTOALBUM: PlexType.DIRECTORY
+        }[plex_type]
+    except KeyError:
+        return PlexType.UNKNOWN
 
 
 def get_type_string(plex_type):
     try:
         return [x for x in dir(PlexType)
-                if getattr(PlexType, x) == plex_type][0]
+                if getattr(PlexType, x) == plex_type][0].capitalize()
     except Exception:
-        return None
+        return 'None'

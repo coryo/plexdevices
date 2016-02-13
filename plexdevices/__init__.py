@@ -1,5 +1,5 @@
 __title__ = 'plexdevices'
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __author__ = 'Cory Parsons'
 
 
@@ -7,8 +7,10 @@ from .device import Device, Server, Player, Connection
 from .remote import Remote
 from .session import Session
 from .exceptions import DeviceConnectionsError, PlexTVError
-from .media import MediaContainer, BaseObject, MediaObject, DirectoryObject, PlayQueue
-from .types import PlexType
+from .media import (MediaContainer, PlayQueue, BaseObject, Directory, InputDirectory, PreferencesDirectory,
+                    MediaItem, Episode, Movie, Track, Photo, VideoClip,
+                    MediaDirectory, Season, Show, PhotoAlbum, Artist, Album)
+from .types import PlexType, get_type_string, get_parent_type
 
 # Set default logging handler to avoid "No handler found" warnings.
 import logging

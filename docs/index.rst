@@ -16,11 +16,11 @@ A Python module for working with plex devices.
     >>> s.servers
     [<Device:Server1 - Plex Media Server>, <Device:Server2 - Plex Media Server>]
     >>> on_deck = s.servers[0].media_container('/library/onDeck')
-    >>> on_deck.children[0].resolve_url()
+    >>> on_deck.children[0].media[0].parts[0].resolve_url()
     http://server/file.mp4?X-Plex-Token=XXXXXXXXXXX
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
    api
 

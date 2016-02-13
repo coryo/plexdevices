@@ -6,13 +6,14 @@ from .compat import json
 from .device import Device, Server, Player, create_device
 from .exceptions import PlexTVError
 from .utils import *
+from . import __version__
 log = logging.getLogger(__name__)
 
 
 class Session(object):
-    """A Plex session.
+    """A Plex session. You can use pickle to save and load existing session objects.
 
-    Basic Usage::
+    Plex.TV Usage::
 
       >>> import plexdevices
       >>> s = plexdevices.Session(user=username, password=password)
@@ -20,22 +21,29 @@ class Session(object):
       >>> on_deck = s.servers[0].media_container('/library/onDeck')
       >>> on_deck.children[0].resolve_url()
       http://server/file.mp4?X-Plex-Token=XXXXXXXXXXX
+
+    Manual Usage::
+
+      >>> import plexdevices
+      >>> s = plexdevices.Session()
+      >>> s.manual_add_server('192.168.1.1', 32400)
+      >>> s.manual_add_server('192.168.1.2', 32400)
+      >>> s.servers
+      [<Device:A - Plex Media Server>, <Device:B - Plex Media Server>]
     """
 
     def __init__(self, user=None, password=None, token=None):
-        self.product = 'plexapi-session'
+        self.product = 'plexdevices-session'
         self.identifier = str(uuid.uuid5(uuid.NAMESPACE_DNS, self.product))
-        self.version = 1
+        self.version = __version__
         self.token = token
         self.user = user
-        self._devices = []
-        #: List of :class:`Device <Device>`'s that provide `server` accessible by the current user.
+        #: List of :class:`Server <Server>`'s accessible by the current user.
         self.servers = []
-        #: List of :class:`Device <Device>`'s that provide `player` accessible by the current user.
+        #: List of :class:`Player <Player>`'s accessible by the current user.
         self.players = []
         #: List of Plex Home users.
         self.users = []
-        self._last_devices, self._last_users = None, None
 
         if user is not None and password is not None:
             self.login(password)
@@ -54,7 +62,6 @@ class Session(object):
 
     def refresh_devices(self):
         """Retrieve the devices for the current user from ``https://plex.tv/api/resources``"""
-        del self._devices[:]
         del self.servers[:]
         del self.players[:]
         try:
@@ -71,47 +78,24 @@ class Session(object):
             log.error('Response: %d - %s' % (res.status_code, res.text))
             raise PlexTVError(res.status_code)
 
-        self._last_devices = res.text
-        self._refresh_devices(res.text)
-
-    def _refresh_devices(self, data):
         try:
-            xml = ET.fromstring(data).getchildren()
+            xml = ET.fromstring(res.text)
+            data = parse_xml(xml)
         except Exception:
             log.error('Response: %d - %s' % (res.status_code, res.text))
             raise PlexTVError(res.text)
         else:
-            for item in xml:
-                if item.tag == 'error':
+            for item in data['_children']:
+                if item['_elementType'] == 'error':
                     log.error('Response: %s' % item.text)
                     raise PlexTVError(item.text)
-                elif item.tag == 'Device':
+                elif item['_elementType'] == 'Device':
                     device = create_device(item)
                     log.debug(device)
-                    self._devices.append(device)
                     if isinstance(device, Server):
                         self.servers.append(device)
-                    elif isinstance(device, Player):
+                    if isinstance(device, Player):
                         self.players.append(device)
-
-    def dump(self):
-        """Dump the session to a json string. It can be stored on disk and loaded with load() to prevent needed to connect to plex.tv."""
-        session = {'user': self.user,
-                   'token': self.token,
-                   'identifier': self.identifier,
-                   'devices': self._last_devices,
-                   'users': self._last_users}
-        return json.dumps(session)
-
-    @staticmethod
-    def load(session_json):
-        """Load a session that has been dumped with dump()."""
-        data = json.loads(session_json)
-        session = Session(user=data['user'], token=data['token'])
-        session._refresh_devices(data['devices'])
-        session._refresh_users(data['users'])
-        session.identifier = data['identifier']
-        return session
 
     def login(self, password):
         """Retrieve the token for the session user from ``https://plex.tv/users/sign_in.json.``"""
@@ -149,16 +133,12 @@ class Session(object):
         except Exception as e:
             raise PlexTVError(str(e))
         else:
-            self._last_users = res.text
-            self._refresh_users(res.text)
-
-    def _refresh_users(self, data):
-        try:
-            xml = ET.fromstring(data)
-            data = parse_xml(xml)
-            self.users = data['_children']
-        except Exception as e:
-            log.error('refresh users {}'.format(str(e)))
+            try:
+                xml = ET.fromstring(res.text)
+                data = parse_xml(xml)
+                self.users = data['_children']
+            except Exception as e:
+                log.error('refresh users {}'.format(str(e)))
 
     def switch_user(self, user_id, pin=None):
         """Switch the current user to the given user id, and refresh the available devices.
@@ -181,3 +161,44 @@ class Session(object):
         else:
             self.token = data['authenticationToken']
             self.refresh_devices()
+
+    def manual_add_server(self, address, port=32400, protocol='http', token=''):
+        """Add a :class:`Server <Server>` to the session.
+
+        :param address: address to the server. e.g. ``127.0.0.1``.
+        :param token: (optional) the ``X-Plex-Token`` to use when accessing this server.
+        """
+        uri = '{}://{}:{}'.format(protocol, address, port)
+        log.debug('manual_add_server: connecting to: ' + uri)
+        params = {'X-Plex-Token': token} if token else {}
+        try:
+            res = requests.get(uri, params=params)
+        except Exception as e:
+            return
+        if 200 > res.status_code >= 400:
+            log.error('Response: %d - %s' % (res.status_code, res.text))
+            return
+        xml = ET.fromstring(res.text)
+        data = parse_xml(xml)
+        log.debug(data)
+        device_data = {
+            'name': data.get('friendlyName'),
+            'product': 'Plex Media Server',
+            'productVersion': data.get('version'),
+            'clientIdentifier': data.get('machineIdentifier'),
+            'provides': 'server',
+            'accessToken': token,
+            'httpsRequired': str(int(protocol == 'https')),
+            '_children': [
+                {'protocol': protocol, 'address': address, 'port': port, 'uri': uri, 'local': '1'}
+            ]
+        }
+        try:
+            server = create_device(device_data)
+        except Exception as e:
+            log.error('manual_add_server: ' + str(e))
+        else:
+            if server._active_connection() is None:
+                log.error('manual_add_server: Cannot connect to devices')
+                return
+            self.servers.append(server)
