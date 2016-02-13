@@ -220,7 +220,8 @@ class PlayQueue(MediaContainer):
             'playQueueItemID': item.data['playQueueItemID'],
             'ratingKey': item.rating_key,
             'duration': item.duration,
-            'time': min(time, item.duration)
+            'time': min(time, item.duration),
+            'key': item.key
         })
         log.debug(('PlayQueue: TIMELINE '
                    '{}/{} - {}'.format(time, item.duration, code)))
