@@ -1,5 +1,5 @@
 __title__ = 'plexdevices'
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 __author__ = 'Cory Parsons'
 
 

@@ -140,12 +140,12 @@ class Device(with_metaclass(DynamicInheritance)):
         self.active = None
         return self.active
 
-    def request(self, endpoint, method=requests.get, data=None, params=None,
+    def request(self, endpoint, method='GET', data=None, params=None,
                 headers={}, raw=False, allow_redirects=True):
         """Make an HTTP request to the device.
 
         :param endpoint: location on server. e.g. ``/library/onDeck``.
-        :param method: (optional) request function. Defaults to ``requests.get``.
+        :param method: (optional) request function. Defaults to ``GET``.
         :param data: (optional) data to send with the request. Defaults to ``None``.
         :param params: (optional) params to include in the URL. Defaults to ``None``.
         :param headers: (optional) additional headers. Defaults to ``{}``.
@@ -168,8 +168,9 @@ class Device(with_metaclass(DynamicInheritance)):
             log.debug(('request: URL={}, raw={}, headers={}, params={}, '
                        'allow_redirects={}').format(url, raw, headers, params,
                                                     allow_redirects))
-            res = method(url, headers=headers, params=params, data=data,
-                         allow_redirects=allow_redirects)
+            res = requests.request(method=method, url=url, headers=headers,
+                                   params=params, data=data,
+                                   allow_redirects=allow_redirects)
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout) as e:
             log.error('request: error connecting - ' + str(e))
@@ -202,7 +203,7 @@ class Server(Device):
         if size is not None and page is not None:
             headers['X-Plex-Container-Start'] = page * size
             headers['X-Plex-Container-Size'] = size
-        code, msg = self.request(endpoint, method=requests.get, params=params,
+        code, msg = self.request(endpoint, method='GET', params=params,
                                  headers=headers,
                                  allow_redirects=allow_redirects)
         if code == 302:

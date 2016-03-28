@@ -3,7 +3,6 @@ import time
 from collections import deque
 import xml.etree.ElementTree as ET
 import threading
-from .packages import requests
 from .device import Player
 from .compat import (json, urlparse, HTTPServer, BaseHTTPRequestHandler)
 from .media import PlayQueue

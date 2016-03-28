@@ -1,6 +1,5 @@
 import logging
 import datetime
-from .packages import requests
 from .compat import quote, json, iteritems
 from .utils import *
 from .types import *
@@ -182,7 +181,7 @@ class PlayQueue(MediaContainer):
         """Remove a :class:`MediaItem <MediaItem>` from the PlayQueue."""
         url = '/playQueues/{}/items/{}'.format(self.id,
                                                item.data['playQueueItemID'])
-        code, data = self.server.request(url, method=requests.delete,
+        code, data = self.server.request(url, method='DELETE',
                                          headers={'Accept': 'application/json'})
         if 200 <= code < 400:
             self.__init__(self.server, json.loads(data))
@@ -196,7 +195,7 @@ class PlayQueue(MediaContainer):
         headers.update(player_headers)
         media, uri = self.media_uri(item, player_headers)
         code, data = self.server.request('/playQueues/{}'.format(self.id),
-                                         method=requests.put,
+                                         method='PUT',
                                          headers=headers,
                                          params={'type': media, 'uri': uri})
         if 200 <= code < 400:
@@ -261,7 +260,7 @@ class PlayQueue(MediaContainer):
         headers.update(player_headers)
         media, uri = PlayQueue.media_uri(item, player_headers)
         code, data = server.request('/playQueues',
-                                    method=requests.post,
+                                    method='POST',
                                     headers=headers,
                                     params={'type': media, 'uri': uri})
         pqid = json.loads(data)['playQueueID']
@@ -433,11 +432,8 @@ class MediaItem(BaseObject, Metadata):
     def __init__(self, data, container):
         super(MediaItem, self).__init__(data, container)
         #: List of :class:`Media <plexdevices.media.Media>` objects that hold information about the file.
-        self.media = []
-        for item in data['_children']:
-            if item['_elementType'] == 'Media':
-                self.media.append(Media(item, self))
-        del self.data['_children']
+        self.media = [Media(x, self) for x in data['_children']
+                      if x['_elementType'] == 'Media']
 
     @property
     def in_progress(self):
@@ -829,11 +825,8 @@ class Media(object):
         self.parent = parent
         self.data = data
         #: List of :class:`Part <plexdevices.media.Part>` objects which references the actual files. Typically there is only one part.
-        self.parts = []
-        for item in data['_children']:
-            if item['_elementType'] == 'Part':
-                self.parts.append(Part(item, self))
-        del self.data['_children']
+        self.parts = [Part(x, self) for x in data['_children']
+                      if x['_elementType'] == 'Part']
 
     @property
     def video_resolution(self):
@@ -959,14 +952,20 @@ class Part(object):
             log.debug('got key: %s' % wkey)
 
         if wkey.startswith('/:/'):
-            # there doesn't seem to be any indication of whether the server function
-            # will redirect us.
             log.debug('key is a some server function.')
-            c = server.media_container(wkey, allow_redirects=False)
-            if isinstance(c, str):
-                log.debug('key caused a redirect. target=%s' % c)
-                return c
-            url = c.children[0].media[0].parts[0].key
+            # make the request and handle the possible outcomes
+            code, data = server.request(wkey, allow_redirects=False, raw=True)
+            if code == 302:
+                log.debug('server function redirected. returning the redirect url.')
+                return data
+            if data.startswith(b'<?xml'):
+                log.debug('server function returns xml. returning the media part url.')
+                data = parse_response(data.decode())
+                c = MediaContainer(server, data)
+                url = c.children[0].media[0].parts[0].key
+            else:
+                log.debug('server function is raw data. returning raw data as bytes.')
+                return data
         else:
             url = '{}{}?X-Plex-Token={}'.format(server.active.url,
                                                 wkey,
