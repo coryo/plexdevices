@@ -1,7 +1,7 @@
 import logging
 import xml.etree.ElementTree as ET
 import uuid
-from .packages import requests
+import requests
 from .compat import json
 from .device import Device, Server, Player, create_device
 from .exceptions import PlexTVError

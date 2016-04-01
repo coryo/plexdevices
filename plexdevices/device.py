@@ -1,5 +1,5 @@
 import logging
-from .packages import requests
+import requests
 import shutil
 import xml.etree.ElementTree as ET
 from .compat import json, quote, with_metaclass

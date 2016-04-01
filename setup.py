@@ -48,7 +48,7 @@ setup(
         'Programming Language :: Python :: 3.5',
     ],
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
-    install_requires=[],
+    install_requires=['requests'],
     extras_require={
         'security': ['pyOpenSSL>=0.13', 'ndg-httpsclient', 'pyasn1'],
     },
