@@ -953,22 +953,16 @@ class Part(object):
 
         if wkey.startswith('/:/'):
             log.debug('key is a some server function.')
-            # make the request and handle the possible outcomes
-            code, data = server.request(wkey, allow_redirects=False, raw=True)
-            if code == 302:
-                log.debug('server function redirected. returning the redirect url.')
-                return data
-            if data.startswith(b'<?xml'):
-                log.debug('server function returns xml. returning the media part url.')
-                data = parse_response(data.decode())
-                c = MediaContainer(server, data)
-                url = c.children[0].media[0].parts[0].key
+            log.debug('indirect? ' + str(self.parent.indirect))
+            if self.parent.indirect:
+                log.debug('media is indirect.')
+                ires = server.media_container(wkey)
+                url = ires.children[0].media[0].parts[0].key
             else:
-                log.debug('server function is raw data. returning raw data as bytes.')
-                return data
+                url = '{}{}&X-Plex-Token={}'.format(server.active.url, wkey,
+                                                    server.access_token)
         else:
-            url = '{}{}?X-Plex-Token={}'.format(server.active.url,
-                                                wkey,
+            url = '{}{}?X-Plex-Token={}'.format(server.active.url, wkey,
                                                 server.access_token)
         log.debug('resolved url: %s' % url)
         return url

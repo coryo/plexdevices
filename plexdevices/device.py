@@ -188,7 +188,7 @@ class Server(Device):
     """A :class:`Device <Device>` which provides a server."""
 
     def container(self, endpoint, size=None, page=None, params=None,
-                  usejson=True, allow_redirects=True):
+                  usejson=True):
         """
         :param endpoint: destination on the server. e.g. ``/library/onDeck``.
         :param size: (optional) the max number of items to retrieve.
@@ -204,28 +204,11 @@ class Server(Device):
             headers['X-Plex-Container-Start'] = page * size
             headers['X-Plex-Container-Size'] = size
         code, msg = self.request(endpoint, method='GET', params=params,
-                                 headers=headers,
-                                 allow_redirects=allow_redirects)
-        if code == 302:
-            return msg
-        try:
-            data = json.loads(msg)
-        except Exception:
-            try:
-                # channels only return xml, maybe it's xml
-                xml = ET.fromstring(msg)
-            except Exception:
-                return {}
-            else:
-                data = parse_xml(xml)
-                if 'totalSize' not in data:
-                    data['totalSize'] = 1
-                return data
-        else:
-            return data
+                                 headers=headers)
+        return parse_response(msg)
 
     def media_container(self, endpoint, size=None, page=None, params=None,
-                        usejson=True, allow_redirects=True):
+                        usejson=True):
         """
         :param endpoint: destination on the server. e.g. ``/library/onDeck``.
         :param size: (optional) the max number of items to retrieve.
@@ -234,12 +217,8 @@ class Server(Device):
         :return: a :class:`MediaContainer <MediaContainer>` representing a Plex Media Container.
         :rtype: :class:`MediaContainer <MediaContainer>`
         """
-        data = self.container(endpoint, size, page, params, usejson,
-                              allow_redirects)
-        if isinstance(data, str):
-            return data
-        else:
-            return MediaContainer(self, data)
+        data = self.container(endpoint, size, page, params, usejson)
+        return MediaContainer(self, data)
 
     def image(self, endpoint, w=None, h=None):
         """If w and h are set, the server will transcode the image to the given size.
