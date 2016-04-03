@@ -174,10 +174,10 @@ class Session(object):
         try:
             res = requests.get(uri, params=params)
         except Exception as e:
-            return
+            raise ConnectionError(e)
         if 200 > res.status_code >= 400:
             log.error('Response: %d - %s' % (res.status_code, res.text))
-            return
+            raise ConnectionError('Response: %d - %s' % (res.status_code, res.text))
         xml = ET.fromstring(res.text)
         data = parse_xml(xml)
         log.debug(data)
@@ -197,8 +197,9 @@ class Session(object):
             server = create_device(device_data)
         except Exception as e:
             log.error('manual_add_server: ' + str(e))
+            raise ConnectionError('Cannot connect to device.')
         else:
             if server._active_connection() is None:
-                log.error('manual_add_server: Cannot connect to devices')
-                return
+                log.error('manual_add_server: Cannot connect to device.')
+                raise ConnectionError('Cannot connect to device.')
             self.servers.append(server)
