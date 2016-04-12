@@ -8,40 +8,42 @@ log = logging.getLogger(__name__)
 
 class MediaFactory(object):
     @staticmethod
-    def factory(data, container):
+    def factory(data):
         t = MediaFactory.type(data)
         if data['_elementType'] == 'Directory':
             if 'ratingKey' in data:
                 if t == PlexType.SEASON:
-                    return Season(data, container)
+                    return Season
                 elif t == PlexType.SHOW:
-                    return Show(data, container)
+                    return Show
                 elif t == PlexType.ARTIST:
-                    return Artist(data, container)
+                    return Artist
                 elif t == PlexType.ALBUM:
-                    return Album(data, container)
+                    return Album
                 elif t == PlexType.PHOTO:
-                    return PhotoAlbum(data, container)
+                    return PhotoAlbum
                 else:
-                    return Directory(data, container)
+                    return Directory
             else:
                 if t == PlexType.PREFERENCES:
-                    return PreferencesDirectory(data, container)
+                    return PreferencesDirectory
                 elif t == PlexType.INPUT:
-                    return InputDirectory(data, container)
+                    return InputDirectory
                 else:
-                    return Directory(data, container)
+                    return Directory
         elif data['_elementType'] in ['Video', 'Track', 'Photo']:
             if t == PlexType.EPISODE:
-                return Episode(data, container)
+                return Episode
             elif t == PlexType.MOVIE:
-                return Movie(data, container)
+                return Movie
             elif t == PlexType.TRACK:
-                return Track(data, container)
+                return Track
             elif t == PlexType.PHOTO:
-                return Photo(data, container)
+                return Photo
             elif t == PlexType.CLIP:
-                return VideoClip(data, container)
+                return VideoClip
+        elif data['_elementType'] == 'Hub':
+            return Hub
         return None
 
     @staticmethod
@@ -68,8 +70,9 @@ class MediaContainer(object):
             #: List of :class:`BaseObject <BaseObject>`'s in the container.
             self.children = []
             for c in data['_children']:
-                item = MediaFactory.factory(c, self)
-                if item is not None:
+                cls = MediaFactory.factory(c)
+                if cls is not None:
+                    item = cls(c, self)
                     self.children.append(item)
             del self.data['_children']
         else:
@@ -328,6 +331,71 @@ class BaseObject(object):
     @property
     def grandparent_type(self):
         return get_parent_type(self.parent_type)
+
+
+class HubMixin(object):
+
+    @property
+    def has_reason(self):
+        return 'reason' in self.data
+
+    @property
+    def reason(self):
+        return self.data.get('reason')
+
+    @property
+    def reason_id(self):
+        return int(self.data.get('reasonID'))
+
+    @property
+    def reason_title(self):
+        return self.data.get('reasonTitle')
+
+
+class Hub(object):
+
+    def __init__(self, data, container):
+        # Dictionary of the item's values.
+        self.data = data
+        #: The :class:`MediaContainer <MediaContainer>` which holds this item.
+        self.container = container
+        if '_children' in data:
+            #: List of :class:`BaseObject <BaseObject>`'s in the Hub.
+            self.children = []
+            for c in data['_children']:
+                cls = MediaFactory.factory(c)
+                if cls is not None:
+                    newclass = type('HubMedia', (cls, HubMixin), {})
+                    item = newclass(c, self)
+                    item.container = container
+                    self.children.append(item)
+            del self.data['_children']
+        else:
+            self.children = []
+
+    def __repr__(self):
+        return '<{}:{}>'.format(self.__class__.__name__, get_type_string(self.type))
+
+    @property
+    def type(self):
+        return MediaFactory.type(self.data)
+
+    @property
+    def hub_identifier(self):
+        return self.data.get('hubIdentifier')
+
+    @property
+    def size(self):
+        return int(self.data.get('size', 0))
+
+    @property
+    def title(self):
+        """ """
+        return self.data.get('title')
+
+    @property
+    def more(self):
+        return bool(int(self.data.get('more', 0)))
 
 
 class Metadata(object):
