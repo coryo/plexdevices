@@ -1,60 +1,8 @@
 import logging
 import datetime
-from .compat import quote, json, iteritems
-from .utils import *
-from .types import *
+import plexdevices.factory
+import plexdevices.compat
 log = logging.getLogger(__name__)
-
-
-class MediaFactory(object):
-    @staticmethod
-    def factory(data):
-        t = MediaFactory.type(data)
-        if data['_elementType'] == 'Directory':
-            if 'ratingKey' in data:
-                if t == PlexType.SEASON:
-                    return Season
-                elif t == PlexType.SHOW:
-                    return Show
-                elif t == PlexType.ARTIST:
-                    return Artist
-                elif t == PlexType.ALBUM:
-                    return Album
-                elif t == PlexType.PHOTO:
-                    return PhotoAlbum
-                else:
-                    return Directory
-            else:
-                if t == PlexType.PREFERENCES:
-                    return PreferencesDirectory
-                elif t == PlexType.INPUT:
-                    return InputDirectory
-                else:
-                    return Directory
-        elif data['_elementType'] in ['Video', 'Track', 'Photo']:
-            if t == PlexType.EPISODE:
-                return Episode
-            elif t == PlexType.MOVIE:
-                return Movie
-            elif t == PlexType.TRACK:
-                return Track
-            elif t == PlexType.PHOTO:
-                return Photo
-            elif t == PlexType.CLIP:
-                return VideoClip
-        elif data['_elementType'] == 'Hub':
-            return Hub
-        return None
-
-    @staticmethod
-    def type(data):
-        if 'settings' in data:
-            dtype = 'prefs'
-        elif 'search' in data:
-            dtype = 'input'
-        else:
-            dtype = data.get('type', 'unknown')
-        return get_type(dtype)
 
 
 class MediaContainer(object):
@@ -65,12 +13,11 @@ class MediaContainer(object):
         self.data = data
         #: The :class:`Server <Server>` which this container was retrieved from.
         self.server = server
-        #: List of :class:`BaseObject <BaseObject>`'s in the container.
         if '_children' in data:
             #: List of :class:`BaseObject <BaseObject>`'s in the container.
             self.children = []
             for c in data['_children']:
-                cls = MediaFactory.factory(c)
+                cls = plexdevices.factory.MediaFactory.factory(c)
                 if cls is not None:
                     item = cls(c, self)
                     self.children.append(item)
@@ -147,14 +94,14 @@ class PlayQueue(MediaContainer):
 
     @property
     def selected_item(self):
-        """The selected :class:`MediaItem <MediaItem>`"""
+        """The selected :class:`MediaItem <plexdevices.media.MediaItem>`"""
         try:
             return self.children[self.selected_item_offset]
         except Exception:
             return None
 
     def update(self):
-        """Update the :class:`PlayQueue <PlayQueue>`'s data from its server."""
+        """Update the :class:`PlayQueue <plexdevices.media.PlayQueue>`'s data from its server."""
         data = self.server.request('/playQueues/{}'.format(self.id))
         self.__init__(self.server, data)
 
@@ -167,32 +114,32 @@ class PlayQueue(MediaContainer):
         return item
 
     def get_next(self):
-        """Select and return the next :class:`MediaItem <MediaItem>` in the PlayQueue, or `None`."""
+        """Select and return the next :class:`MediaItem <plexdevices.media.MediaItem>` in the PlayQueue, or `None`."""
         if self.selected_item is None:
             return None
         i = self.children.index(self.selected_item) + 1
         return self.select(self.children[i]) if 0 <= i <= len(self) - 1 else None
 
     def get_prev(self):
-        """Select and return the previous :class:`MediaItem <MediaItem>` in the PlayQueue, or `None`."""
+        """Select and return the previous :class:`MediaItem <plexdevices.media.MediaItem>` in the PlayQueue, or `None`."""
         if self.selected_item is None:
             return None
         i = self.children.index(self.selected_item) - 1
         return self.select(self.children[i]) if 0 <= i <= len(self) - 1 else None
 
     def remove_item(self, item):
-        """Remove a :class:`MediaItem <MediaItem>` from the PlayQueue."""
+        """Remove a :class:`MediaItem <plexdevices.media.MediaItem>` from the PlayQueue."""
         url = '/playQueues/{}/items/{}'.format(self.id,
                                                item.data['playQueueItemID'])
         code, data = self.server.request(url, method='DELETE',
                                          headers={'Accept': 'application/json'})
         if 200 <= code < 400:
-            self.__init__(self.server, json.loads(data))
+            self.__init__(self.server, plexdevices.compat.json.loads(data))
         else:
             log.error('playqueue: could not remove item from playqueue.')
 
     def add_item(self, item, player_headers):
-        """Add :class:`Media <Media>` to the PlayQueue."""
+        """Add :class:`Media <plexdevices.media.Media>` to the PlayQueue."""
         headers = self.server.headers
         headers['Accept'] = 'application/json'
         headers.update(player_headers)
@@ -202,7 +149,7 @@ class PlayQueue(MediaContainer):
                                          headers=headers,
                                          params={'type': media, 'uri': uri})
         if 200 <= code < 400:
-            self.__init__(self.server, json.loads(data))
+            self.__init__(self.server, plexdevices.compat.json.loads(data))
         else:
             log.error('playqueue: could not add item to playqueue.')
 
@@ -243,16 +190,16 @@ class PlayQueue(MediaContainer):
         uri = 'library://{}/{}/{}'.format(
             player_headers['X-Plex-Client-Identifier'],
             item_type,
-            quote(item.key, safe=''))
+            plexdevices.compat.quote(item.key, safe=''))
         return (media, uri)
 
     @staticmethod
     def create(item, player_headers):
         """Create a PlayQueue on a server and return a PlayQueue object.
 
-        :param item: the :class:`Media <Media>` to be the initial item added to the PlayQueue.
+        :param item: the :class:`Media <plexdevices.media.Media>` to be the initial item added to the PlayQueue.
         :param player_headers: Dictionary of headers identifying the player using the PlayQueue. Must include X-Plex-Client-Identifier and X-Plex-Device-Name.
-        :return: :class:`PlayQueue <PlayQueue>` object
+        :return: :class:`PlayQueue <plexdevices.media.PlayQueue>` object
         :rtype: plexdevices.PlayQueue
         """
         if 'X-Plex-Client-Identifier' not in player_headers:
@@ -266,7 +213,7 @@ class PlayQueue(MediaContainer):
                                     method='POST',
                                     headers=headers,
                                     params={'type': media, 'uri': uri})
-        pqid = json.loads(data)['playQueueID']
+        pqid = plexdevices.compat.json.loads(data)['playQueueID']
         return PlayQueue(server, server.container('/playQueues/{}'.format(pqid)))
 
 
@@ -281,11 +228,11 @@ class BaseObject(object):
     def __init__(self, data, container):
         # Dictionary of the item's values.
         self.data = data
-        #: The :class:`MediaContainer <MediaContainer>` which holds this item.
+        #: The :class:`MediaContainer <plexdevices.media.MediaContainer>` which holds this item.
         self.container = container
 
     def __repr__(self):
-        return '<{}:{}>'.format(self.__class__.__name__, get_type_string(self.type))
+        return '<{}: {}>'.format(self.__class__.__name__, self.title)
 
     @property
     def markable(self):
@@ -308,7 +255,7 @@ class BaseObject(object):
 
     @property
     def type(self):
-        return MediaFactory.type(self.data)
+        return plexdevices.factory.MediaFactory.type(self.data)
 
     @property
     def has_parent(self):
@@ -331,71 +278,6 @@ class BaseObject(object):
     @property
     def grandparent_type(self):
         return get_parent_type(self.parent_type)
-
-
-class HubMixin(object):
-
-    @property
-    def has_reason(self):
-        return 'reason' in self.data
-
-    @property
-    def reason(self):
-        return self.data.get('reason')
-
-    @property
-    def reason_id(self):
-        return int(self.data.get('reasonID'))
-
-    @property
-    def reason_title(self):
-        return self.data.get('reasonTitle')
-
-
-class Hub(object):
-
-    def __init__(self, data, container):
-        # Dictionary of the item's values.
-        self.data = data
-        #: The :class:`MediaContainer <MediaContainer>` which holds this item.
-        self.container = container
-        if '_children' in data:
-            #: List of :class:`BaseObject <BaseObject>`'s in the Hub.
-            self.children = []
-            for c in data['_children']:
-                cls = MediaFactory.factory(c)
-                if cls is not None:
-                    newclass = type('HubMedia', (cls, HubMixin), {})
-                    item = newclass(c, self)
-                    item.container = container
-                    self.children.append(item)
-            del self.data['_children']
-        else:
-            self.children = []
-
-    def __repr__(self):
-        return '<{}:{}>'.format(self.__class__.__name__, get_type_string(self.type))
-
-    @property
-    def type(self):
-        return MediaFactory.type(self.data)
-
-    @property
-    def hub_identifier(self):
-        return self.data.get('hubIdentifier')
-
-    @property
-    def size(self):
-        return int(self.data.get('size', 0))
-
-    @property
-    def title(self):
-        """ """
-        return self.data.get('title')
-
-    @property
-    def more(self):
-        return bool(int(self.data.get('more', 0)))
 
 
 class Metadata(object):
@@ -541,7 +423,7 @@ class MediaItem(BaseObject, Metadata):
 
 
 class Movie(MediaItem):
-    """:class:`MediaItem <MediaItem>` with extra metadata for a Movie."""
+    """:class:`MediaItem <plexdevices.media.MediaItem>` with extra metadata for a Movie."""
     @property
     def markable(self):
         return self.container.is_library
@@ -573,7 +455,7 @@ class Movie(MediaItem):
 
 
 class Track(MediaItem):
-    """:class:`MediaItem <MediaItem>` with extra metadata for a Music Track."""
+    """:class:`MediaItem <plexdevices.media.MediaItem>` with extra metadata for a Music Track."""
     @property
     def markable(self):
         return self.container.is_library
@@ -632,7 +514,7 @@ class Track(MediaItem):
 
 
 class Photo(MediaItem):
-    """:class:`MediaItem <MediaItem>` with extra metadata for a Photo."""
+    """:class:`MediaItem <plexdevices.media.MediaItem>` with extra metadata for a Photo."""
     @property
     def originally_available_at(self):
         """ """
@@ -650,7 +532,7 @@ class Photo(MediaItem):
 
 
 class Episode(MediaItem):
-    """:class:`MediaItem <MediaItem>` with extra metadata for a TV Show Episode."""
+    """:class:`MediaItem <plexdevices.media.MediaItem>` with extra metadata for a TV Show Episode."""
     @property
     def markable(self):
         return self.container.is_library
@@ -692,7 +574,7 @@ class Episode(MediaItem):
 
 
 class VideoClip(MediaItem):
-    """:class:`MediaItem <MediaItem>` with extra metadata for a Video Clip."""
+    """:class:`MediaItem <plexdevices.media.MediaItem>` with extra metadata for a Video Clip."""
     @property
     def duration(self):
         """Duration in ms."""
@@ -704,11 +586,11 @@ class Directory(BaseObject):
 
 
 class PreferencesDirectory(Directory):
-    """A special :class:`Directory <Directory>` used in channels for channel preferences."""
+    """A special :class:`Directory <plexdevices.media.Directory>` used in channels for channel preferences."""
 
 
 class InputDirectory(Directory):
-    """A special :class:`Directory <Directory>` where you should get a string from the user and send it to the key as a `query` parameter.
+    """A special :class:`Directory <plexdevices.media.Directory>` where you should get a string from the user and send it to the key as a `query` parameter.
     ::
 
         if isinstance(item, InputDirectory):
@@ -718,16 +600,16 @@ class InputDirectory(Directory):
 
 
 class MediaDirectory(Directory, Metadata):
-    """A directory that holds MediaItems. These directories have metadata, can be added to a :class:`PlayQueue <PlayQueue>`, and can be marked watched/unwatched.
-    A :class:`MediaContainer <MediaContainer>` with its key will contain all the :class:`MediaItems <MediaItem>`."""
+    """A directory that holds MediaItems. These directories have metadata, can be added to a :class:`PlayQueue <plexdevices.media.PlayQueue>`, and can be marked watched/unwatched.
+    A :class:`MediaContainer <plexdevices.media.MediaContainer>` with its key will contain all the :class:`MediaItems <plexdevices.media.MediaItem>`."""
 
 
 class PhotoAlbum(MediaDirectory):
-    """:class:`MediaDirectory <MediaDirectory>` with extra metadata for a Photo Album."""
+    """:class:`MediaDirectory <plexdevices.media.MediaDirectory>` with extra metadata for a Photo Album."""
 
 
 class Season(MediaDirectory):
-    """:class:`MediaDirectory <MediaDirectory>` with extra metadata for a TV Season."""
+    """:class:`MediaDirectory <plexdevices.media.MediaDirectory>` with extra metadata for a TV Season."""
     @property
     def markable(self):
         return self.container.is_library
@@ -773,7 +655,7 @@ class Season(MediaDirectory):
 
 
 class Artist(MediaDirectory):
-    """:class:`MediaDirectory <MediaDirectory>` with extra metadata for a music Artist."""
+    """:class:`MediaDirectory <plexdevices.media.MediaDirectory>` with extra metadata for a music Artist."""
     @property
     def markable(self):
         return self.container.is_library
@@ -793,7 +675,7 @@ class Artist(MediaDirectory):
 
 
 class Album(MediaDirectory):
-    """:class:`MediaDirectory <MediaDirectory>` with extra metadata for a music Album."""
+    """:class:`MediaDirectory <plexdevices.media.MediaDirectory>` with extra metadata for a music Album."""
     @property
     def markable(self):
         return self.container.is_library
@@ -833,7 +715,7 @@ class Album(MediaDirectory):
 
 
 class Show(MediaDirectory):
-    """:class:`MediaDirectory <MediaDirectory>` with extra metadata for a TV Show."""
+    """:class:`MediaDirectory <plexdevices.media.MediaDirectory>` with extra metadata for a TV Show."""
     @property
     def markable(self):
         return self.container.is_library
@@ -884,8 +766,8 @@ class Show(MediaDirectory):
 
 
 class Media(object):
-    """A Media object represents a single copy of a :class:`MediaItem <MediaItem>`.
-    In most cases, a :class:`MediaItem <MediaItem>` will have a single Media object.
+    """A Media object represents a single copy of a :class:`MediaItem <plexdevices.media.MediaItem>`.
+    In most cases, a :class:`MediaItem <plexdevices.media.MediaItem>` will have a single Media object.
     If the server has a 480p and a 1080p copy of a movie, there will be two Media objects.
     """
 

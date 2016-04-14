@@ -16,3 +16,7 @@ class PlexTVError(Exception):
 
     def __str__(self):
         return 'Plex.tv error: {}'.format(repr(self.error))
+
+
+class RemoteCallbackError(Exception):
+    pass

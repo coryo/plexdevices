@@ -2,10 +2,11 @@ import logging
 import requests
 import shutil
 import xml.etree.ElementTree as ET
-from .compat import json, quote, with_metaclass
-from .exceptions import DeviceConnectionsError
-from .media import MediaContainer, PlayQueue
-from .utils import *
+import plexdevices.compat
+import plexdevices.exceptions
+import plexdevices.hubs
+import plexdevices.media
+import plexdevices.utils
 log = logging.getLogger(__name__)
 
 
@@ -32,7 +33,7 @@ class DynamicInheritance(type):
         return super(DynamicInheritance, cls).__call__(data)
 
 
-class Device(with_metaclass(DynamicInheritance)):
+class Device(plexdevices.compat.with_metaclass(DynamicInheritance)):
 
     def __init__(self, data):
         self.data = data
@@ -46,22 +47,22 @@ class Device(with_metaclass(DynamicInheritance)):
 
     @property
     def product(self):
-        """ """
+        """Plex product name. e.g. ``Plex Media Server``"""
         return self.data.get('product')
 
     @property
     def product_version(self):
-        """ """
+        """Version of the Plex product. e.g. ``0.9.16.4.1911-ee6e505``"""
         return self.data.get('productVersion')
 
     @property
     def platform(self):
-        """ """
+        """Operating system of the device."""
         return self.data.get('platform')
 
     @property
     def platform_version(self):
-        """ """
+        """Operating system version."""
         return self.data.get('platformVersion')
 
     @property
@@ -71,7 +72,7 @@ class Device(with_metaclass(DynamicInheritance)):
 
     @property
     def client_identifier(self):
-        """ """
+        """Unique identifier string."""
         return self.data.get('clientIdentifier')
 
     @property
@@ -158,7 +159,7 @@ class Device(with_metaclass(DynamicInheritance)):
             self._active_connection()
             if self.active is None:
                 log.error('request: unable to get an active connection.')
-                raise DeviceConnectionsError(self)
+                raise plexdevices.exceptions.DeviceConnectionsError(self)
         if 'X-Plex-Token' not in headers:
             headers.update(self.headers)
         try:
@@ -175,7 +176,7 @@ class Device(with_metaclass(DynamicInheritance)):
                 requests.exceptions.Timeout) as e:
             log.error('request: error connecting - ' + str(e))
             self.active = None
-            raise DeviceConnectionsError(self)
+            raise plexdevices.exceptions.DeviceConnectionsError(self)
         else:
             log.debug('response: %d' % res.status_code)
             if res.status_code == 302:
@@ -185,7 +186,7 @@ class Device(with_metaclass(DynamicInheritance)):
 
 
 class Server(Device):
-    """A :class:`Device <Device>` which provides a server."""
+    """A :class:`Device <plexdevices.device.Device>` which provides a server."""
 
     def container(self, endpoint, size=None, page=None, params=None,
                   usejson=True):
@@ -205,7 +206,7 @@ class Server(Device):
             headers['X-Plex-Container-Size'] = size
         code, msg = self.request(endpoint, method='GET', params=params,
                                  headers=headers)
-        return parse_response(msg)
+        return plexdevices.utils.parse_response(msg)
 
     def media_container(self, endpoint, size=None, page=None, params=None,
                         usejson=True):
@@ -214,11 +215,11 @@ class Server(Device):
         :param size: (optional) the max number of items to retrieve.
         :param page: (optional) the page number for paging large containers.
         :param params: (optional) Dictionary of parameters to be added to the url in the request.
-        :return: a :class:`MediaContainer <MediaContainer>` representing a Plex Media Container.
-        :rtype: :class:`MediaContainer <MediaContainer>`
+        :return: a :class:`MediaContainer <plexdevices.media.MediaContainer>` representing a Plex Media Container.
+        :rtype: :class:`MediaContainer <plexdevices.media.MediaContainer>`
         """
         data = self.container(endpoint, size, page, params, usejson)
-        return MediaContainer(self, data)
+        return plexdevices.media.MediaContainer(self, data)
 
     def image(self, endpoint, w=None, h=None):
         """If w and h are set, the server will transcode the image to the given size.
@@ -240,9 +241,20 @@ class Server(Device):
                                  raw=True)
         return res
 
+    def hub(self, endpoint, size=None, page=None, params=None):
+        """`added in 0.4.0`
+
+        :param endpoint: destination on the hubs api. e.g. ``/hubs/onDeck``.
+        :param params: (optional) Dictionary of parameters to be added to the url in the request.
+
+        :rtype: :class:`HubsContainer <plexdevices.hubs.HubsContainer>`
+        """
+        data = self.container(endpoint, size, page, params)
+        return plexdevices.hubs.HubsContainer(self, data)
+
 
 class Player(Device):
-    """A :class:`Device <Device>` which provides a player."""
+    """A :class:`Device <plexdevices.device.Device>` which provides a player."""
     pass
 
 

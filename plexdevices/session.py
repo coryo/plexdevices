@@ -2,34 +2,16 @@ import logging
 import xml.etree.ElementTree as ET
 import uuid
 import requests
-from .compat import json
-from .device import Device, Server, Player, create_device
-from .exceptions import PlexTVError
-from .utils import *
-from . import __version__
+import plexdevices.compat
+import plexdevices.device
+import plexdevices.exceptions
+import plexdevices.utils
+from plexdevices import __version__
 log = logging.getLogger(__name__)
 
 
 class Session(object):
     """A Plex session. You can use pickle to save and load existing session objects.
-
-    Plex.TV Usage::
-
-      >>> import plexdevices
-      >>> s = plexdevices.Session(user=username, password=password)
-      >>> s.refresh_devices()
-      >>> on_deck = s.servers[0].media_container('/library/onDeck')
-      >>> on_deck.children[0].resolve_url()
-      http://server/file.mp4?X-Plex-Token=XXXXXXXXXXX
-
-    Manual Usage::
-
-      >>> import plexdevices
-      >>> s = plexdevices.Session()
-      >>> s.manual_add_server('192.168.1.1', 32400)
-      >>> s.manual_add_server('192.168.1.2', 32400)
-      >>> s.servers
-      [<Device:A - Plex Media Server>, <Device:B - Plex Media Server>]
     """
 
     def __init__(self, user=None, password=None, token=None):
@@ -72,29 +54,29 @@ class Session(object):
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout) as e:
             log.error(str(e))
-            raise PlexTVError(str(e))
+            raise plexdevices.exceptions.PlexTVError(str(e))
 
         if 200 > res.status_code >= 400:
             log.error('Response: %d - %s' % (res.status_code, res.text))
-            raise PlexTVError(res.status_code)
+            raise plexdevices.exceptions.PlexTVError(res.status_code)
 
         try:
             xml = ET.fromstring(res.text)
-            data = parse_xml(xml)
+            data = plexdevices.utils.parse_xml(xml)
         except Exception:
             log.error('Response: %d - %s' % (res.status_code, res.text))
-            raise PlexTVError(res.text)
+            raise plexdevices.exceptions.PlexTVError(res.text)
         else:
             for item in data['_children']:
                 if item['_elementType'] == 'error':
                     log.error('Response: %s' % item.text)
-                    raise PlexTVError(item.text)
+                    raise plexdevices.exceptions.PlexTVError(item.text)
                 elif item['_elementType'] == 'Device':
-                    device = create_device(item)
+                    device = plexdevices.device.create_device(item)
                     log.debug(device)
-                    if isinstance(device, Server):
+                    if isinstance(device, plexdevices.device.Server):
                         self.servers.append(device)
-                    if isinstance(device, Player):
+                    if isinstance(device, plexdevices.device.Player):
                         self.players.append(device)
 
     def login(self, password):
@@ -108,22 +90,22 @@ class Session(object):
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout) as e:
             log.error(str(e))
-            raise PlexTVError(str(e))
+            raise plexdevices.exceptions.PlexTVError(str(e))
 
         if 200 > res.status_code >= 400:
             log.error('Response: %d - %s' % (res.status_code, res.text))
-            raise PlexTVError(res.status_code)
+            raise plexdevices.exceptions.PlexTVError(res.status_code)
 
         try:
-            data = json.loads(res.text)
+            data = plexdevices.compat.json.loads(res.text)
         except Exception:
             log.error('Response: %d - %s' % (res.status_code, res.text))
-            raise PlexTVError(res.text)
+            raise plexdevices.exceptions.PlexTVError(res.text)
         else:
             error = data.get('error', None)
             if error is not None:
                 log.error('Response: %d - %s' % (res.status_code, res.text))
-                raise PlexTVError(error)
+                raise plexdevices.exceptions.PlexTVError(error)
             self.token = data['user']['authentication_token']
 
     def refresh_users(self):
@@ -131,11 +113,11 @@ class Session(object):
         try:
             res = requests.get('https://plex.tv/api/home/users', headers=self.headers)
         except Exception as e:
-            raise PlexTVError(str(e))
+            raise plexdevices.exceptions.PlexTVError(str(e))
         else:
             try:
                 xml = ET.fromstring(res.text)
-                data = parse_xml(xml)
+                data = plexdevices.utils.parse_xml(xml)
                 self.users = data['_children']
             except Exception as e:
                 log.error('refresh users {}'.format(str(e)))
@@ -152,12 +134,12 @@ class Session(object):
                                 headers=self.headers,
                                 params=params)
             xml = ET.fromstring(res.text)
-            data = parse_xml(xml)
+            data = plexdevices.utils.parse_xml(xml)
             log.debug(data)
             if data['_elementType'] == 'Response':
-                raise PlexTVError(data['status'])
+                raise plexdevices.exceptions.PlexTVError(data['status'])
         except Exception as e:
-            raise PlexTVError(str(e))
+            raise plexdevices.exceptions.PlexTVError(str(e))
         else:
             self.token = data['authenticationToken']
             self.refresh_devices()
@@ -179,7 +161,7 @@ class Session(object):
             log.error('Response: %d - %s' % (res.status_code, res.text))
             raise ConnectionError('Response: %d - %s' % (res.status_code, res.text))
         xml = ET.fromstring(res.text)
-        data = parse_xml(xml)
+        data = plexdevices.utils.parse_xml(xml)
         log.debug(data)
         device_data = {
             'name': data.get('friendlyName'),
@@ -194,7 +176,7 @@ class Session(object):
             ]
         }
         try:
-            server = create_device(device_data)
+            server = plexdevices.device.create_device(device_data)
         except Exception as e:
             log.error('manual_add_server: ' + str(e))
             raise ConnectionError('Cannot connect to device.')

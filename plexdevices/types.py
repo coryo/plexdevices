@@ -109,6 +109,8 @@ class PlexType(object):
     ACTOR = 52
     #:
     DIRECTOR = 53
+    #:
+    MIXED = 54
 
 
 def get_type(type_str):
@@ -167,8 +169,8 @@ def get_type(type_str):
             'none': PlexType.NONE,
             'person': PlexType.PERSON,
             'actor': PlexType.ACTOR,
-            'director': PlexType.DIRECTOR
-
+            'director': PlexType.DIRECTOR,
+            'mixed': PlexType.MIXED
         }[type_str]
     except KeyError:
         return PlexType.UNKNOWN

@@ -1,16 +1,9 @@
 __title__ = 'plexdevices'
-__version__ = '0.3.3'
+__version__ = '0.4.0'
 __author__ = 'Cory Parsons'
 
-
-from .device import Device, Server, Player, Connection
-from .remote import Remote
-from .session import Session
-from .exceptions import DeviceConnectionsError, PlexTVError
-from .media import (MediaContainer, PlayQueue, BaseObject, Directory, InputDirectory, PreferencesDirectory,
-                    MediaItem, Episode, Movie, Track, Photo, VideoClip,
-                    MediaDirectory, Season, Show, PhotoAlbum, Artist, Album, Hub)
-from .types import PlexType, get_type_string, get_parent_type
+from plexdevices.exceptions import DeviceConnectionsError, PlexTVError, RemoteCallbackError
+from plexdevices.api import create_session, create_remote
 
 # Set default logging handler to avoid "No handler found" warnings.
 import logging

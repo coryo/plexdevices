@@ -1,11 +1,12 @@
 import uuid
 import time
-from collections import deque
+import collections
 import xml.etree.ElementTree as ET
 import threading
-from .device import Player
-from .compat import (json, urlparse, HTTPServer, BaseHTTPRequestHandler)
-from .media import PlayQueue
+import plexdevices.exceptions
+import plexdevices.device
+import plexdevices.compat
+import plexdevices.media
 
 LOCATIONS = {'navigation': 'navigation',
              'fullScreenVideo': 'video',
@@ -13,7 +14,7 @@ LOCATIONS = {'navigation': 'navigation',
              'fullScreenPhoto': 'photo'}
 
 
-class RemoteRequestHandler(BaseHTTPRequestHandler):
+class RemoteRequestHandler(plexdevices.compat.BaseHTTPRequestHandler):
 
     def do_POST(self):
         if 'content-length' not in self.headers:
@@ -26,7 +27,7 @@ class RemoteRequestHandler(BaseHTTPRequestHandler):
         self.server.remote.timeline_post(post_body)
 
     def do_GET(self):
-        parsed = urlparse(self.path)
+        parsed = plexdevices.compat.urlparse(self.path)
         params = (dict([z.split('=') for z in parsed.query.split('&')])
                   if parsed.query else None)
         message = '{}\n{}'.format(parsed.path, params)
@@ -34,12 +35,12 @@ class RemoteRequestHandler(BaseHTTPRequestHandler):
         self.server.remote.command(parsed.path, params)
 
 
-class RemoteServer(HTTPServer):
+class RemoteServer(plexdevices.compat.HTTPServer):
 
     def __init__(self, server_address, RequestHandlerClass, remote):
-        self.timeline = deque(maxlen=10)
+        self.timeline = collections.deque(maxlen=10)
         self.remote = remote
-        HTTPServer.__init__(self, server_address, RequestHandlerClass)
+        super(RemoteServer, self).__init__(server_address, RequestHandlerClass)
 
     @property
     def last(self):
@@ -51,28 +52,11 @@ class RemoteServer(HTTPServer):
 
 class Remote(object):
     """A remote control for a Plex device.
-
-    Usage (subscribe method)::
-
-      >>> import plexdevices
-      >>> s = plexdevices.Session(user=username, password=password)
-      >>> s.refresh_devices()
-      >>> player = s.players[0]
-      >>> r = plexdevices.Remote(player=player)
-      >>> r.timeline_subscribe()
-      >>> r.down()
-      >>> r.select()
-      >>> r.timeline_unsubscribe()
-
-    Usage (poll method)::
-
-      >>> r = plexdevices.Remote(player=player)
-      >>> r.timeline_poll()
-      >>> r.down()
-      >>> r.select()
     """
-    def __init__(self, player, name, port=8000):
+    def __init__(self, player, name, port=8000, post_callback=None):
+        #: The unique identifier string for this device.
         self.identifier = str(uuid.uuid5(uuid.NAMESPACE_DNS, name))
+        #:
         self.name = name
         self.command_id = 0
         self.player = player
@@ -82,6 +66,7 @@ class Remote(object):
         self.server_thread = None
         self.poll_thread = None
         self.subscribed = False
+        self._callback = post_callback
 
     @property
     def headers(self):
@@ -145,8 +130,11 @@ class Remote(object):
         return self.parse_timeline(self.server.last)
 
     def timeline_post(self, data):
-        """Called whenever the player POSTs the timeline to the remote. Subclass and reimplement to add functionality."""
-        pass
+        if self._callback is not None:
+            try:
+                self._callback(self.parse_timeline(data))
+            except Exception as e:
+                raise plexdevices.exceptions.RemoteCallbackError(e)
 
     def timeline_subscribe(self):
         """Subscribe to the timeline."""
@@ -186,7 +174,7 @@ class Remote(object):
         return t is not None and t['location'] != 'navigation'
 
     def mirror(self, plex_object, **kwargs):
-        """Send the player to the preplay screen of the given :class:`BaseObject <BaseObject>`."""
+        """Send the player to the preplay screen of the given :class:`BaseObject <plexdevices.media.BaseObject>`."""
         server, key = plex_object.container.server, plex_object.key
         self.command('/player/mirror/details', {
             'key': key,
@@ -200,11 +188,11 @@ class Remote(object):
         })
 
     def play_media(self, media_object):
-        """Make the player play the given :class:`MediaItem <MediaItem>`."""
+        """Make the player play the given :class:`MediaItem <plexdevices.media.MediaItem>`."""
         server, key = media_object.container.server, media_object.key
         headers = self.headers
         headers['X-Plex-Target-Client-Identifier'] = self.player.client_identifier
-        play_queue = PlayQueue.create(server, media_object, headers)
+        play_queue = plexdevices.media.PlayQueue.create(server, media_object, headers)
         pqid = play_queue.id
         self.command('/player/playback/playMedia', {
             'key': key,

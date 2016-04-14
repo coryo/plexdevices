@@ -5,35 +5,43 @@ API Documentation
 
 .. module:: plexdevices
 
+Main Interface
+~~~~~~~~~~~~~~
+
+.. autofunction:: create_session
+.. autofunction:: create_remote
+
 ____
 
 Sessions
 ~~~~~~~~
 
-.. autoclass:: plexdevices.Session
+.. autoclass:: plexdevices.session.Session
     :inherited-members:
 
 ____
 
-Device Objects
-~~~~~~~~~~~~~~
+Devices
+~~~~~~~
 
 Device
 ------
 
-.. autoclass:: plexdevices.Device()
+.. autoclass:: plexdevices.device.Device()
     :inherited-members:
 
 Server
 ------
 
-.. autoclass:: plexdevices.Server()
+.. autoclass:: plexdevices.device.Server()
+    :show-inheritance:
     :members:
 
 Player
 ------
 
-.. autoclass:: plexdevices.Player()
+.. autoclass:: plexdevices.device.Player()
+    :show-inheritance:
     :members:
 
 ____
@@ -44,17 +52,29 @@ Containers
 Media Container
 ---------------
 
-.. autoclass:: plexdevices.MediaContainer()
+.. autoclass:: plexdevices.media.MediaContainer()
     :inherited-members:
 
 Play Queues
 -----------
 
-.. inheritance-diagram:: plexdevices.MediaContainer plexdevices.PlayQueue
-   :parts: 1
-
-.. autoclass:: plexdevices.PlayQueue()
+.. autoclass:: plexdevices.media.PlayQueue()
     :inherited-members:
+    :show-inheritance:
+
+Hubs
+----
+
+`added in 0.4.0`
+
+These are for the Plex Media Server api at ``/hubs``.
+
+.. autoclass:: plexdevices.hubs.HubsContainer()
+    :show-inheritance:
+    :members:
+
+.. autoclass:: plexdevices.hubs.Hub()
+    :members:
 
 ____
 
@@ -65,65 +85,71 @@ Deciding what to do with the items in a container should be done by checking the
 ::
 
     def item_clicked(item):
-        if isinstance(item, (plexdevices.Movie, plexdevices.Episode)):
+        if isinstance(item, (plexdevices.media.Movie, plexdevices.media.Episode)):
             video_player.play(item.resolve_url())
-        elif isinstance(item, Directory):
+        elif isinstance(item, plexdevices.media.Directory):
             next_container = server.media_container(item.key)
 
 
-Base Objects
-------------
+Directories
+-----------
 
-.. autoclass:: plexdevices.BaseObject()
-
-.. autoclass:: plexdevices.Directory()
+.. autoclass:: plexdevices.media.Directory()
+    :show-inheritance:
     :members: title, key
 
-.. autoclass:: plexdevices.InputDirectory()
+.. autoclass:: plexdevices.media.InputDirectory()
+    :show-inheritance:
 
-.. autoclass:: plexdevices.PreferencesDirectory()
-
+.. autoclass:: plexdevices.media.PreferencesDirectory()
+    :show-inheritance:
 
 Media Directories
 -----------------
 
-.. autoclass:: plexdevices.MediaDirectory()
+.. autoclass:: plexdevices.media.MediaDirectory()
     :inherited-members:
 
 PhotoAlbum
 ^^^^^^^^^^
 
-.. autoclass:: plexdevices.PhotoAlbum()
+.. autoclass:: plexdevices.media.PhotoAlbum()
+    :show-inheritance:
     :members:
 
 Album
 ^^^^^
 
-.. autoclass:: plexdevices.Album()
+.. autoclass:: plexdevices.media.Album()
+    :show-inheritance:
     :members:
 
 Artist
 ^^^^^^
 
-.. autoclass:: plexdevices.Artist()
+.. autoclass:: plexdevices.media.Artist()
+    :show-inheritance:
     :members:
 
 Season
 ^^^^^^
 
-.. autoclass:: plexdevices.Season()
+.. autoclass:: plexdevices.media.Season()
+    :show-inheritance:
     :members:
 
 Show
 ^^^^
 
-.. autoclass:: plexdevices.Show()
+.. autoclass:: plexdevices.media.Show()
+    :show-inheritance:
     :members:
 
 Media Items
 -----------
 
-.. autoclass:: plexdevices.MediaItem()
+.. autoclass:: plexdevices.media.MediaItem()
+    :show-inheritance:
     :inherited-members:
 
 Media
@@ -141,25 +167,29 @@ Parts
 Episode
 ^^^^^^^
 
-.. autoclass:: plexdevices.Episode()
+.. autoclass:: plexdevices.media.Episode()
+    :show-inheritance:
     :members:
 
 Movie
 ^^^^^
 
-.. autoclass:: plexdevices.Movie()
+.. autoclass:: plexdevices.media.Movie()
+    :show-inheritance:
     :members:
 
 Track
 ^^^^^
 
-.. autoclass:: plexdevices.Track()
+.. autoclass:: plexdevices.media.Track()
+    :show-inheritance:
     :members:
 
 Photo
 ^^^^^
 
-.. autoclass:: plexdevices.Photo()
+.. autoclass:: plexdevices.media.Photo()
+    :show-inheritance:
     :members:
 
 ____
@@ -167,6 +197,6 @@ ____
 Remote
 ~~~~~~
 
-.. autoclass:: plexdevices.Remote
+.. autoclass:: plexdevices.remote.Remote
     :inherited-members:
 

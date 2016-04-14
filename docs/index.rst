@@ -11,11 +11,15 @@ A Python module for working with plex devices.
 ::
 
     >>> import plexdevices
-    >>> s = plexdevices.Session(user=username, password=password)
+    >>> s = plexdevices.create_session(user=username, password=password)
     >>> s.refresh_devices()
     >>> s.servers
     [<Device:Server1 - Plex Media Server>, <Device:Server2 - Plex Media Server>]
     >>> on_deck = s.servers[0].media_container('/library/onDeck')
+    >>> on_deck
+    <plexdevices.media.MediaContainer object at 0x03BD32B0>
+    >>> on_deck.children
+    [<Movie:Movie>, <Episode:Episode>, <Episode:Episode>, <Episode:Episode>]
     >>> on_deck.children[0].media[0].parts[0].resolve_url()
     http://server/file.mp4?X-Plex-Token=XXXXXXXXXXX
 
