@@ -1,9 +1,10 @@
 __title__ = 'plexdevices'
-__version__ = '0.4.0'
+__version__ = '0.4.1'
 __author__ = 'Cory Parsons'
 
-from plexdevices.exceptions import DeviceConnectionsError, PlexTVError, RemoteCallbackError
-from plexdevices.api import create_session, create_remote
+from plexdevices.exceptions import (DeviceConnectionsError, PlexTVError,
+                                    RemoteCallbackError)
+from plexdevices.api import create_session, create_remote, create_play_queue
 
 # Set default logging handler to avoid "No handler found" warnings.
 import logging

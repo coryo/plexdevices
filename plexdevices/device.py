@@ -13,19 +13,20 @@ log = logging.getLogger(__name__)
 def create_device(data):
     """Create a Device object and mixin the functionality it provides."""
     provides = data.get('provides').split(',')
-    mixins = tuple([_provides_mixins(p) for p in provides])
-    return Device(data, mixins=mixins)
+    mixins = tuple([_provides_mixins(p) for p in provides
+                    if _provides_mixins(p) is not None])
+    return Device(data, mixins=mixins if mixins else None)
 
 
 def _provides_mixins(provides):
     return {
         'server': Server,
         'player': Player,
-    }[provides]
+    }.get(provides, None)
 
 
 class DynamicInheritance(type):
-    def __call__(cls, data, mixins):
+    def __call__(cls, data, mixins=None):
         if mixins:
             assert isinstance(mixins, tuple)
             new_cls = type(cls.__name__, mixins + (cls,), {})

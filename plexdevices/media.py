@@ -1,4 +1,5 @@
 import logging
+import time
 import datetime
 import plexdevices.factory
 import plexdevices.compat
@@ -11,10 +12,10 @@ class MediaContainer(object):
     def __init__(self, server, data):
         #: Dictionary of the MediaContainer's values.
         self.data = data
-        #: The :class:`Server <Server>` which this container was retrieved from.
+        #: The :class:`Server <plexdevices.device.Server>` which this container was retrieved from.
         self.server = server
         if '_children' in data:
-            #: List of :class:`BaseObject <BaseObject>`'s in the container.
+            #: List of items in the container.
             self.children = []
             for c in data['_children']:
                 cls = plexdevices.factory.MediaFactory.factory(c)
@@ -139,7 +140,8 @@ class PlayQueue(MediaContainer):
             log.error('playqueue: could not remove item from playqueue.')
 
     def add_item(self, item, player_headers):
-        """Add :class:`Media <plexdevices.media.Media>` to the PlayQueue."""
+        """Add a :class:`MediaDirectory <plexdevices.media.MediaDirectory>` or
+        :class:`MediaItems <plexdevices.media.MediaItem>` to the PlayQueue."""
         headers = self.server.headers
         headers['Accept'] = 'application/json'
         headers.update(player_headers)
@@ -273,11 +275,11 @@ class BaseObject(object):
 
     @property
     def parent_type(self):
-        return get_parent_type(self.type)
+        return plexdevices.types.get_parent_type(self.type)
 
     @property
     def grandparent_type(self):
-        return get_parent_type(self.parent_type)
+        return plexdevices.types.get_parent_type(self.parent_type)
 
 
 class Metadata(object):
@@ -364,6 +366,9 @@ class Metadata(object):
 
     def mark_watched(self):
         """Mark this item as watched on its server."""
+        if self.in_progress:
+            del self.data['viewOffset']
+        self.data['lastViewedAt'] = int(time.time())
         self.container.server.request('/:/scrobble', params={
             'key': self.rating_key,
             'identifier': self.container.identifier,
@@ -371,6 +376,10 @@ class Metadata(object):
 
     def mark_unwatched(self):
         """Mark this item as unwatched on its server."""
+        if self.in_progress:
+            del self.data['viewOffset']
+        if 'lastViewedAt' in self.data:
+            del self.data['lastViewedAt']
         self.container.server.request('/:/unscrobble', params={
             'key': self.rating_key,
             'identifier': self.container.identifier,
@@ -412,7 +421,7 @@ class MediaItem(BaseObject, Metadata):
     @property
     def watched(self):
         """``True`` if the item is watched."""
-        return self.last_viewed_at and not self.in_progress
+        return bool(self.last_viewed_at) and not self.in_progress
 
     def resolve_url(self):
         """Return the url of the first part regardless of how many there are."""

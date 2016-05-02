@@ -1,5 +1,7 @@
 import plexdevices.session
 import plexdevices.remote
+import plexdevices.media
+import plexdevices.compat
 
 
 def create_session(user=None, password=None, token=None):
@@ -83,3 +85,21 @@ def create_remote(player, name, port=8000, callback=None):
 
     """
     return plexdevices.remote.Remote(player, name, port, callback)
+
+
+def create_play_queue(media_item, player_identifier, player_name):
+    player_headers = {'X-Plex-Client-Identifier': client_identifier,
+                      'X-Plex-Client-Name': client_name}
+
+    server = media_item.container.server
+    headers = server.headers
+    headers['Accept'] = 'application/json'
+    headers.update(player_headers)
+    media, uri = plexdevices.media.PlayQueue.media_uri(media_item, player_headers)
+    code, data = server.request('/playQueues',
+                                method='POST',
+                                headers=headers,
+                                params={'type': media, 'uri': uri})
+    pqid = plexdevices.compat.json.loads(data)['playQueueID']
+    return plexdevices.media.PlayQueue(server, server.container('/playQueues/{}'.format(pqid)))
+

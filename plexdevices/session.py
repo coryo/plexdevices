@@ -20,9 +20,9 @@ class Session(object):
         self.version = __version__
         self.token = token
         self.user = user
-        #: List of :class:`Server <Server>`'s accessible by the current user.
+        #: List of :class:`Server <plexdevices.device.Server>`'s accessible by the current user.
         self.servers = []
-        #: List of :class:`Player <Player>`'s accessible by the current user.
+        #: List of :class:`Player <plexdevices.device.Player>`'s accessible by the current user.
         self.players = []
         #: List of Plex Home users.
         self.users = []
@@ -145,7 +145,7 @@ class Session(object):
             self.refresh_devices()
 
     def manual_add_server(self, address, port=32400, protocol='http', token=''):
-        """Add a :class:`Server <Server>` to the session.
+        """Add a :class:`Server <plexdevices.device.Server>` to the session.
 
         :param address: address to the server. e.g. ``127.0.0.1``.
         :param token: (optional) the ``X-Plex-Token`` to use when accessing this server.

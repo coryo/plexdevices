@@ -16,7 +16,7 @@ ____
 Sessions
 ~~~~~~~~
 
-.. autoclass:: plexdevices.session.Session
+.. autoclass:: plexdevices.session.Session()
     :inherited-members:
 
 ____
@@ -107,7 +107,11 @@ Directories
 Media Directories
 -----------------
 
+MediaDirectory
+^^^^^^^^^^^^^^
+
 .. autoclass:: plexdevices.media.MediaDirectory()
+    :show-inheritance:
     :inherited-members:
 
 PhotoAlbum
@@ -147,6 +151,9 @@ Show
 
 Media Items
 -----------
+
+MediaItem
+^^^^^^^^^
 
 .. autoclass:: plexdevices.media.MediaItem()
     :show-inheritance:
@@ -197,6 +204,8 @@ ____
 Remote
 ~~~~~~
 
-.. autoclass:: plexdevices.remote.Remote
+.. autoclass:: plexdevices.remote.Remote()
+    :member-order: bysource
     :inherited-members:
+
 
