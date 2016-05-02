@@ -59,7 +59,9 @@ class Remote(object):
         #:
         self.name = name
         self.command_id = 0
+        #:
         self.player = player
+        #:
         self.port = port
         self.last_volume = 0
         self.server = None
@@ -206,57 +208,91 @@ class Remote(object):
             'commandID': self.command_id
         })
 
-    # NAV
+    # convenience commands
     def up(self):
+        """ Navigation: up """
         self.command('/player/navigation/moveUp')
 
     def down(self):
+        """ Navigation: down """
         self.command('/player/navigation/moveDown')
 
     def left(self):
+        """ Navigation: left """
         self.command('/player/navigation/moveLeft')
 
     def right(self):
+        """ Navigation: right """
         self.command('/player/navigation/moveRight')
 
     def select(self):
+        """ Navigation: select """
         self.command('/player/navigation/select')
 
     def back(self):
+        """ Navigation: back """
         self.command('/player/navigation/back')
 
     def home(self):
+        """ Navigation: home """
         self.command('/player/navigation/home')
 
     def music(self):
+        """ Navigation: music
+
+        Navigate to the player’s music playback view, if music is currently playing.
+        """
         self.command('/player/navigation/music')
-    # PLAYBACK
-    def pause(self):
-        self.command('/player/playback/pause')
 
-    def play(self):
-        self.command('/player/playback/play')
+    def pause(self, media_type=None):
+        """ Playback control: pause
 
-    def skip_next(self):
-        self.command('/player/playback/skipNext')
+        :param media_type: (optional) ``music, photo, video`` in case there are multiple things happening."""
+        args = None if media_type is None else {'type': media_type}
+        self.command('/player/playback/pause', args)
 
-    def skip_previous(self):
-        self.command('/player/playback/skipPrevious')
+    def play(self, media_type=None):
+        """ Playback control: play """
+        args = None if media_type is None else {'type': media_type}
+        self.command('/player/playback/play', args)
 
-    def stop(self):
-        self.command('/player/playback/stop')
+    def skip_next(self, media_type=None):
+        """ Playback control: skip next """
+        args = None if media_type is None else {'type': media_type}
+        self.command('/player/playback/skipNext', args)
 
-    def seek(self, offset):  # milliseconds
-        self.command('/player/playback/seekTo', {'offset': offset})
+    def skip_previous(self, media_type=None):
+        """ Playback control: skip previous"""
+        args = None if media_type is None else {'type': media_type}
+        self.command('/player/playback/skipPrevious', args)
 
-    def skip(self, key):
-        self.command('/player/playback/skipTo', {'key': key})
+    def stop(self, media_type=None):
+        """ Playback control: stop """
+        args = None if media_type is None else {'type': media_type}
+        self.command('/player/playback/stop', args)
 
-    def step_back(self):
-        self.command('/player/playback/stepBack')
+    def seek(self, media_type, offset):
+        """ Playback control: seek to
 
-    def step_forward(self):
-        self.command('/player/playback/stepForward')
+        :param offset: absolute position in milliseconds.
+        """
+        self.command('/player/playback/seekTo', {'offset': offset, 'type': media_type})
 
-    def volume(self, v):  # 0-100
-        self.command('/player/playback/setParameters', {'volume': v})
+    def skip(self, media_type, key):
+        """ Playback control: skip to item with matching key """
+        self.command('/player/playback/skipTo', {'key': key, 'type': media_type})
+
+    def step_back(self, media_type):
+        """ Playback control: step back """
+        self.command('/player/playback/stepBack', {'type': media_type})
+
+    def step_forward(self, media_type):
+        """ Playback control: step forward """
+        self.command('/player/playback/stepForward', {'type': media_type})
+
+    def volume(self, media_type, level):
+        """ Playback control: set volume.
+
+        :param media_type: mandatory. ``music, photo, video``.
+        :param level: volume level [0-100]."""
+        self.command('/player/playback/setParameters', {'volume': level, 'type': media_type})
