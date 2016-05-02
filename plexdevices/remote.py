@@ -240,8 +240,7 @@ class Remote(object):
     def music(self):
         """ Navigation: music
 
-        Navigate to the player’s music playback view, if music is currently playing.
-        """
+        Navigate to the player's music playback view, if music is currently playing."""
         self.command('/player/navigation/music')
 
     def pause(self, media_type=None):
