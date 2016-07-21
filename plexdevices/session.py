@@ -6,12 +6,15 @@ import plexdevices.compat
 import plexdevices.device
 import plexdevices.exceptions
 import plexdevices.utils
+import plexdevices.users
 from plexdevices import __version__
 log = logging.getLogger(__name__)
 
 
 class Session(object):
-    """A Plex session. You can use pickle to save and load existing session objects.
+    """A Plex session. You can use pickle to save and load existing session
+    objects.
+
     """
 
     def __init__(self, user=None, password=None, token=None):
@@ -20,12 +23,15 @@ class Session(object):
         self.version = __version__
         self.token = token
         self.user = user
-        #: List of :class:`Server <plexdevices.device.Server>`'s accessible by the current user.
         self.servers = []
-        #: List of :class:`Player <plexdevices.device.Player>`'s accessible by the current user.
+        """List of :obj:`Server <plexdevices.device.Server>` s accessible
+        by the current user."""
         self.players = []
-        #: List of Plex Home users.
+        """List of :obj:`Player <plexdevices.device.Player>` s accessible
+        by the current user."""
         self.users = []
+        """:obj:`list` of :obj:`User <plexdevices.users.User>` s that can be
+        switched to."""
 
         if user is not None and password is not None:
             self.login(password)
@@ -43,7 +49,10 @@ class Session(object):
         return headers
 
     def refresh_devices(self):
-        """Retrieve the devices for the current user from ``https://plex.tv/api/resources``"""
+        """Retrieve the devices for the current user from
+        ``https://plex.tv/api/resources``
+
+        """
         del self.servers[:]
         del self.players[:]
         try:
@@ -80,7 +89,10 @@ class Session(object):
                         self.players.append(device)
 
     def login(self, password):
-        """Retrieve the token for the session user from ``https://plex.tv/users/sign_in.json.``"""
+        """Retrieve the token for the session user from
+        ``https://plex.tv/users/sign_in.json.``
+
+        """
         try:
             log.debug('Signing in to plex.tv as "%s"' % self.user)
             res = requests.post('https://plex.tv/users/sign_in.json',
@@ -109,30 +121,52 @@ class Session(object):
             self.token = data['user']['authentication_token']
 
     def refresh_users(self):
-        """Retrieve the Plex Home users from ``https://plex.tv/api/home/users``."""
+        """Retrieve the Plex Home users from
+        ``https://plex.tv/api/home/users``.
+
+        """
         try:
-            res = requests.get('https://plex.tv/api/home/users', headers=self.headers)
+            res = requests.get('https://plex.tv/api/home/users',
+                               headers=self.headers)
         except Exception as e:
             raise plexdevices.exceptions.PlexTVError(str(e))
         else:
             try:
                 xml = ET.fromstring(res.text)
                 data = plexdevices.utils.parse_xml(xml)
-                self.users = data['_children']
+                self.users = [
+                    plexdevices.users.User(x, data['machineIdentifier'])
+                    for x in data['_children']
+                ]
             except Exception as e:
                 log.error('refresh users {}'.format(str(e)))
 
-    def switch_user(self, user_id, pin=None):
-        """Switch the current user to the given user id, and refresh the available devices.
+    def get_server_by_id(self, machine_identifier):
+        servers = [x for x in self.servers if
+                   x.client_identifier == machine_identifier]
+        return servers[0] if servers else None
 
-        :param user_id: the `id` of the user. As given from ``https://plex.tv/api/home/users``.
-        :param pin: (optional) the 4-digit PIN code of the user.
+    def get_user_by_id(self, user_id):
+        """ """
+        users = [x for x in self.users if x.id == user_id]
+        return users[0] if users else None
+
+    def switch_user(self, user, pin=None):
+        """Switch the current user to the given
+        :obj:`User <plexdevices.users.User>`, and refresh the available
+        devices.
+
+        Args:
+            user (:obj:`User <plexdevices.users.User>`): the user to become.
+            pin (:obj:`int`, optional): the 4-digit PIN code of the user.
+
         """
         try:
             params = {'pin': pin} if pin is not None else None
-            res = requests.post('https://plex.tv/api/home/users/{}/switch'.format(user_id),
-                                headers=self.headers,
-                                params=params)
+            res = requests.post(
+                'https://plex.tv/api/home/users/{}/switch'.format(user.id),
+                headers=self.headers,
+                params=params)
             xml = ET.fromstring(res.text)
             data = plexdevices.utils.parse_xml(xml)
             log.debug(data)
@@ -145,10 +179,19 @@ class Session(object):
             self.refresh_devices()
 
     def manual_add_server(self, address, port=32400, protocol='http', token=''):
-        """Add a :class:`Server <plexdevices.device.Server>` to the session.
+        """Add a :obj:`Server <plexdevices.device.Server>` to the session.
 
-        :param address: address to the server. e.g. ``127.0.0.1``.
-        :param token: (optional) the ``X-Plex-Token`` to use when accessing this server.
+        Args:
+            address (:obj:`str`): address to the server. e.g. ``127.0.0.1``.
+            token (:obj:`str`, optional): the ``X-Plex-Token`` to use when
+                accessing this server.
+
+        Returns:
+            :obj:`Server <plexdevices.device.Server>`: the server.
+
+        Raises:
+            ConnectionError
+
         """
         uri = '{}://{}:{}'.format(protocol, address, port)
         log.debug('manual_add_server: connecting to: ' + uri)
@@ -159,7 +202,8 @@ class Session(object):
             raise ConnectionError(e)
         if 200 > res.status_code >= 400:
             log.error('Response: %d - %s' % (res.status_code, res.text))
-            raise ConnectionError('Response: %d - %s' % (res.status_code, res.text))
+            raise ConnectionError('Response: %d - %s' % (res.status_code,
+                                                         res.text))
         xml = ET.fromstring(res.text)
         data = plexdevices.utils.parse_xml(xml)
         log.debug(data)
@@ -172,7 +216,8 @@ class Session(object):
             'accessToken': token,
             'httpsRequired': str(int(protocol == 'https')),
             '_children': [
-                {'protocol': protocol, 'address': address, 'port': port, 'uri': uri, 'local': '1'}
+                {'protocol': protocol, 'address': address, 'port': port,
+                 'uri': uri, 'local': '1'}
             ]
         }
         try:
@@ -185,3 +230,4 @@ class Session(object):
                 log.error('manual_add_server: Cannot connect to device.')
                 raise ConnectionError('Cannot connect to device.')
             self.servers.append(server)
+            return server

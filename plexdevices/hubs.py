@@ -3,27 +3,6 @@ import plexdevices.factory
 
 
 class HubsContainer(plexdevices.media.MediaContainer):
-
-    def __init__(self, server, data):
-        #: Dictionary of the HubsContainer's values.
-        self.data = data
-        #: The :class:`Server <Server>` which this container was retrieved from.
-        self.server = server
-        if '_children' in data:
-            #: List of items in the container. :class:`BaseObject <BaseObject>`, :class:`Hub <plexdevices.hubs.Hub>`
-            self.children = []
-            for c in data['_children']:
-                cls = plexdevices.factory.MediaFactory.factory(c)
-                if cls is not None:
-                    item = cls(c, self)
-                    self.children.append(item)
-            del self.data['_children']
-        else:
-            self.children = []
-
-    def __len__(self):
-        return len(self.children)
-
     @property
     def size(self):
         """ """
@@ -70,13 +49,13 @@ class Hub(HubsItemBase):
     def __init__(self, data, container):
         # Dictionary of the item's values.
         self.data = data
-        #: The :class:`HubsContainer     <plexdevices.hubs.HubsContainer>` which holds this item.
+        #: The :class:`HubsContainer <plexdevices.hubs.HubsContainer>` which holds this item.
         self.container = container
         if '_children' in data:
             #: List of :class:`BaseObject <BaseObject>`'s in the Hub.
             self.children = []
             for c in data['_children']:
-                cls = plexdevices.factory.MediaFactory.factory(c)
+                cls = plexdevices.factory.media_factory(c)
                 if cls is not None:
                     newclass = type('HubsItem', (cls, HubsItemBase, SearchMixin), {})
                     item = newclass(c, self)
@@ -103,7 +82,7 @@ class Hub(HubsItemBase):
     @property
     def type(self):
         """ """
-        return plexdevices.factory.MediaFactory.type(self.data)
+        return plexdevices.factory.media_type(self.data)
 
     @property
     def hub_identifier(self):

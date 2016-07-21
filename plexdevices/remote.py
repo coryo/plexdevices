@@ -1,5 +1,4 @@
 import uuid
-import time
 import collections
 import xml.etree.ElementTree as ET
 import threading
@@ -67,8 +66,10 @@ class Remote(object):
         self.server = None
         self.server_thread = None
         self.poll_thread = None
+        #: True if the remote is subscribed to the timeline.
         self.subscribed = False
         self._callback = post_callback
+        self._test_connection()
 
     @property
     def headers(self):
@@ -94,6 +95,7 @@ class Remote(object):
         self.server = RemoteServer(('', self.port), RemoteRequestHandler, self)
         self.server_thread = threading.Thread(target=self.server.serve_forever)
         self.poll_thread = threading.Thread(target=self._timeline_sub_poll)
+        self._quit_polling = threading.Event()
         self.server_thread.daemon = True
         self.poll_thread.daemon = True
 
@@ -109,14 +111,15 @@ class Remote(object):
             pass
 
     def _timeline_sub_poll(self, rate=30):
-        while self.subscribed:
-            if not self.subscribed:
-                break
+        while not self._quit_polling.is_set():
             self.command('/player/timeline/subscribe', {
                 'protocol': 'http',
                 'port': self.port
             })
-            time.sleep(rate)
+            self._quit_polling.wait(rate)
+
+    def _test_connection(self):
+        self.command('/')
 
     def command(self, command, params=None):
         """Send a command to the player with optional parameters."""
@@ -158,6 +161,8 @@ class Remote(object):
         self._stop_server()
         self.command_id = 0
         self.subscribed = False
+        self._quit_polling.set()
+        self.poll_thread.join()
 
     def timeline_poll(self):
         """This is an alternative to the subscribe command for controllers that cannot use

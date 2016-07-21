@@ -1,12 +1,9 @@
 .. _api:
 
-API Documentation
-=================
-
 .. module:: plexdevices
 
 Main Interface
-~~~~~~~~~~~~~~
+==============
 
 .. autofunction:: create_session
 .. autofunction:: create_remote
@@ -14,7 +11,7 @@ Main Interface
 ____
 
 Sessions
-~~~~~~~~
+========
 
 .. autoclass:: plexdevices.session.Session()
     :inherited-members:
@@ -22,7 +19,7 @@ Sessions
 ____
 
 Devices
-~~~~~~~
+=======
 
 Device
 ------
@@ -46,8 +43,16 @@ Player
 
 ____
 
+Users
+=====
+
+.. autoclass:: plexdevices.users.User()
+    :members:
+
+____
+
 Containers
-~~~~~~~~~~
+==========
 
 Media Container
 ---------------
@@ -79,7 +84,7 @@ These are for the Plex Media Server api at ``/hubs``.
 ____
 
 Items in Containers
-~~~~~~~~~~~~~~~~~~~
+===================
 
 Deciding what to do with the items in a container should be done by checking the type with :func:`isinstance`.
 ::
@@ -202,7 +207,7 @@ Photo
 ____
 
 Remote
-~~~~~~
+======
 
 .. autoclass:: plexdevices.remote.Remote()
     :member-order: bysource

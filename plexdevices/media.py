@@ -1,3 +1,4 @@
+import os
 import logging
 import time
 import datetime
@@ -18,7 +19,7 @@ class MediaContainer(object):
             #: List of items in the container.
             self.children = []
             for c in data['_children']:
-                cls = plexdevices.factory.MediaFactory.factory(c)
+                cls = plexdevices.factory.media_factory(c)
                 if cls is not None:
                     item = cls(c, self)
                     self.children.append(item)
@@ -195,8 +196,8 @@ class PlayQueue(MediaContainer):
             plexdevices.compat.quote(item.key, safe=''))
         return (media, uri)
 
-    @staticmethod
-    def create(item, player_headers):
+    @classmethod
+    def create(cls, item, player_headers):
         """Create a PlayQueue on a server and return a PlayQueue object.
 
         :param item: the :class:`Media <plexdevices.media.Media>` to be the initial item added to the PlayQueue.
@@ -210,13 +211,13 @@ class PlayQueue(MediaContainer):
         headers = server.headers
         headers['Accept'] = 'application/json'
         headers.update(player_headers)
-        media, uri = PlayQueue.media_uri(item, player_headers)
+        media, uri = cls.media_uri(item, player_headers)
         code, data = server.request('/playQueues',
                                     method='POST',
                                     headers=headers,
                                     params={'type': media, 'uri': uri})
         pqid = plexdevices.compat.json.loads(data)['playQueueID']
-        return PlayQueue(server, server.container('/playQueues/{}'.format(pqid)))
+        return cls(server, server.container('/playQueues/{}'.format(pqid)))
 
 
 class BaseObject(object):
@@ -255,9 +256,17 @@ class BaseObject(object):
         """Either the key to the thumb, or ``None``. Use :func:`~plexdevices.Server.image` to get the image data."""
         return self.data.get('thumb')
 
+    def resolve_thumb_url(self):
+        if not self.thumb or self.thumb.startswith('http'):
+            return self.thumb
+        server = self.container.server
+        return '{}{}{}X-Plex-Token={}'.format(server.active.url, self.thumb,
+                                              '&' if '?' in self.thumb else '?',
+                                              server.access_token)
+
     @property
     def type(self):
-        return plexdevices.factory.MediaFactory.type(self.data)
+        return plexdevices.factory.media_type(self.data)
 
     @property
     def has_parent(self):
@@ -885,6 +894,10 @@ class Part(object):
         return self.data['file'] if 'file' in self.data else None
 
     @property
+    def file_name(self):
+        return os.path.split(self.file)[-1] if self.file is not None else self.key.split('/')[-1]
+
+    @property
     def size(self):
         """Size of the file in bytes."""
         return int(self.data['size']) if 'size' in self.data else None
@@ -918,10 +931,12 @@ class Part(object):
                 ires = server.media_container(wkey)
                 url = ires.children[0].media[0].parts[0].key
             else:
-                url = '{}{}&X-Plex-Token={}'.format(server.active.url, wkey,
-                                                    server.access_token)
+                url = '{}{}{}X-Plex-Token={}'.format(server.active.url, wkey,
+                                                     '&' if '?' in wkey else '?',
+                                                     server.access_token)
         else:
-            url = '{}{}?X-Plex-Token={}'.format(server.active.url, wkey,
-                                                server.access_token)
+            url = '{}{}{}X-Plex-Token={}'.format(server.active.url, wkey,
+                                                 '&' if '?' in wkey else '?',
+                                                 server.access_token)
         log.debug('resolved url: %s' % url)
         return url

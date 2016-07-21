@@ -1,7 +1,5 @@
 import logging
 import requests
-import shutil
-import xml.etree.ElementTree as ET
 import plexdevices.compat
 import plexdevices.exceptions
 import plexdevices.hubs
@@ -13,8 +11,7 @@ log = logging.getLogger(__name__)
 def create_device(data):
     """Create a Device object and mixin the functionality it provides."""
     provides = data.get('provides').split(',')
-    mixins = tuple([_provides_mixins(p) for p in provides
-                    if _provides_mixins(p) is not None])
+    mixins = tuple([x for x in [_provides_mixins(p) for p in provides] if x is not None])
     return Device(data, mixins=mixins if mixins else None)
 
 
@@ -29,6 +26,7 @@ class DynamicInheritance(type):
     def __call__(cls, data, mixins=None):
         if mixins:
             assert isinstance(mixins, tuple)
+            mixins = tuple([x for x in mixins if x is not None])
             new_cls = type(cls.__name__, mixins + (cls,), {})
             return super(DynamicInheritance, new_cls).__call__(data)
         return super(DynamicInheritance, cls).__call__(data)
@@ -41,89 +39,93 @@ class Device(plexdevices.compat.with_metaclass(DynamicInheritance)):
         self.connections = [Connection(conn) for conn in data['_children']]
         self.active = None
 
+    def __eq__(self, other):
+        if self.__class__.__name__ == other.__class__.__name__:
+            return self.client_identifier == other.client_identifier
+        return False
+
     @property
     def name(self):
-        """ """
+        """:obj:`str`"""
         return self.data.get('name')
 
     @property
     def product(self):
-        """Plex product name. e.g. ``Plex Media Server``"""
+        """:obj:`str`: Plex product name. e.g. ``Plex Media Server``"""
         return self.data.get('product')
 
     @property
     def product_version(self):
-        """Version of the Plex product. e.g. ``0.9.16.4.1911-ee6e505``"""
+        """:obj:`str`: Version of the Plex product. e.g. ``0.9.16.4.1911-ee6e505``"""
         return self.data.get('productVersion')
 
     @property
     def platform(self):
-        """Operating system of the device."""
+        """:obj:`str`: Operating system of the device."""
         return self.data.get('platform')
 
     @property
     def platform_version(self):
-        """Operating system version."""
+        """:obj:`str`: Operating system version."""
         return self.data.get('platformVersion')
 
     @property
     def device(self):
-        """ """
+        """:obj:`str`"""
         return self.data.get('device')
 
     @property
     def client_identifier(self):
-        """Unique identifier string."""
+        """:obj:`str`: Unique identifier string."""
         return self.data.get('clientIdentifier')
 
     @property
     def created_at(self):
-        """ """
+        """:obj:`str`"""
         return self.data.get('createdAt')
 
     @property
     def last_seen_at(self):
-        """ """
+        """:obj:`str`"""
         return self.data.get('lastSeenAt')
 
     @property
     def provides(self):
-        """:type: list"""
+        """:obj:`list`"""
         return self.data.get('provides').split(',')
 
     @property
     def access_token(self):
-        """ """
+        """:obj:`str`"""
         return self.data.get('accessToken')
 
     @property
     def owned(self):
-        """:type: bool"""
+        """:obj:`bool`"""
         return bool(int(self.data.get('owned', '0')))
 
     @property
     def public_address_matches(self):
-        """:type: bool"""
+        """:obj:`bool`"""
         return bool(int(self.data.get('publicAddressMatches', '0')))
 
     @property
     def presence(self):
-        """:type: bool"""
+        """:obj:`bool`"""
         return bool(int(self.data.get('presence', '0')))
 
     @property
     def synced(self):
-        """:type: bool"""
+        """:obj:`bool`"""
         return bool(int(self.data.get('synced', '0')))
 
     @property
     def https_required(self):
-        """:type: bool"""
+        """:obj:`bool`"""
         return bool(int(self.data.get('httpsRequired', '0')))
 
     @property
     def headers(self):
-        """ """
         return {'X-Plex-Token': self.access_token}
 
     def __reduce__(self):
@@ -146,15 +148,19 @@ class Device(plexdevices.compat.with_metaclass(DynamicInheritance)):
                 headers={}, raw=False, allow_redirects=True):
         """Make an HTTP request to the device.
 
-        :param endpoint: location on server. e.g. ``/library/onDeck``.
-        :param method: (optional) request function. Defaults to ``GET``.
-        :param data: (optional) data to send with the request. Defaults to ``None``.
-        :param params: (optional) params to include in the URL. Defaults to ``None``.
-        :param headers: (optional) additional headers. Defaults to ``{}``.
-        :param raw: (optional) return raw data. Defaults to ``False``.
-        :param allow_redirects: (optional) follow 302 redirects. Defaults to ``True``.
-        :return: (HTTP status code, data)
-        :rtype: Tuple (int, str)
+        Args:
+            endpoint (:obj:`str`): location on server.
+                e.g. ``/library/onDeck``.
+            method (:obj:`str`, optional): request function.
+            data (:obj:`dict`, optional): data to send with the request.
+            params (:obj:`dict`, optional): params to include in the URL.
+            headers (:obj:`dict`, optional): additional headers.
+            raw (:obj:`bool`, optional): return raw data.
+            allow_redirects (:obj:`bool`, optional): follow 302 redirects.
+
+        Returns:
+            :obj:`tuple`: (HTTP status code, data)
+
         """
         if self.active is None:
             self._active_connection()
@@ -192,12 +198,18 @@ class Server(Device):
     def container(self, endpoint, size=None, page=None, params=None,
                   usejson=True):
         """
-        :param endpoint: destination on the server. e.g. ``/library/onDeck``.
-        :param size: (optional) the max number of items to retrieve.
-        :param page: (optional) the page number for paging large containers.
-        :param params: (optional) Dictionary of parameters to be added to the url in the request.
-        :return: a Dictionary representing a Plex Media Container.
-        :rtype: Dictionary
+        Args:
+            endpoint (:obj:`str`): destination on the server.
+                e.g. ``/library/onDeck``.
+            size (:obj:`int`, optional): the max number of items to retrieve.
+            page (:obj:`int`, optional): the page number for paging large
+                containers.
+            params (:obj:`dict`, optional): Dictionary of parameters to be
+                added to the url in the request.
+
+        Returns:
+            :obj:`dict`: a Dictionary representing a Plex Media Container.
+
         """
         headers = self.headers
         if usejson:
@@ -212,23 +224,36 @@ class Server(Device):
     def media_container(self, endpoint, size=None, page=None, params=None,
                         usejson=True):
         """
-        :param endpoint: destination on the server. e.g. ``/library/onDeck``.
-        :param size: (optional) the max number of items to retrieve.
-        :param page: (optional) the page number for paging large containers.
-        :param params: (optional) Dictionary of parameters to be added to the url in the request.
-        :return: a :class:`MediaContainer <plexdevices.media.MediaContainer>` representing a Plex Media Container.
-        :rtype: :class:`MediaContainer <plexdevices.media.MediaContainer>`
+        Args:
+            endpoint (:obj:`str`): destination on the server.
+                e.g. ``/library/onDeck``.
+            size (:obj:`int`, optional): the max number of items to retrieve.
+            page (:obj:`int`, optional): the page number for paging large
+                containers.
+            params (:obj:`dict`, optional): Dictionary of parameters to be
+                added to the url in the request.
+
+        Returns:
+            :obj:`MediaContainer <plexdevices.media.MediaContainer>`: an
+            object representing a Plex Media Container.
+
         """
         data = self.container(endpoint, size, page, params, usejson)
         return plexdevices.media.MediaContainer(self, data)
 
     def image(self, endpoint, w=None, h=None):
-        """If w and h are set, the server will transcode the image to the given size.
+        """If w and h are set, the server will transcode the image to the
+        given size.
 
-        :param endpoint: location of the image. This can also be a full URL of an image not on the server (for easy channel support).
-        :param w: (optional) width to transcode.
-        :param h: (optional) height to transcode.
-        :return: Raw data of an image.
+        Args:
+            endpoint (:obj:`str`): location of the image. This can also be a
+                full URL of an image not on the server.
+            w (:obj:`int`, optional): width to transcode.
+            h (:obj:`int`, optional): height to transcode.
+
+        Returns:
+             :obj:`str`: raw data of an image.
+
         """
         if endpoint.startswith('http'):
             res = requests.get(endpoint)
@@ -245,10 +270,16 @@ class Server(Device):
     def hub(self, endpoint, size=None, page=None, params=None):
         """`added in 0.4.0`
 
-        :param endpoint: destination on the hubs api. e.g. ``/hubs/onDeck``.
-        :param params: (optional) Dictionary of parameters to be added to the url in the request.
+        Args:
+            endpoint (:obj:`str`): destination on the hubs api.
+                e.g. ``/hubs/onDeck``.
+            params (:obj:`dict`, optional): parameters to be added to the url
+                in the request.
 
-        :rtype: :class:`HubsContainer <plexdevices.hubs.HubsContainer>`
+        Returns:
+            :obj:`HubsContainer <plexdevices.hubs.HubsContainer>` an object
+            representing a Media Container.
+
         """
         data = self.container(endpoint, size, page, params)
         return plexdevices.hubs.HubsContainer(self, data)
