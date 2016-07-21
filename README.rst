@@ -1,7 +1,7 @@
 plexdevices
 ===========
 
-http://plexdevices.readthedocs.org/
+[![Documentation Status](https://readthedocs.org/projects/plexdevices/badge/?version=latest)](http://plexdevices.readthedocs.io/en/latest/?badge=latest)
 
 Installation
 ------------
