@@ -126,9 +126,9 @@ class Remote(object):
         p = {'commandID': self.command_id}
         if params is not None:
             p.update(params)
-        code, msg = self.player.request(command, headers=self.headers, params=p)
+        res = self.player.request(command, headers=self.headers, params=p)
         self.command_id += 1
-        return msg
+        return res.text
 
     def timeline(self):
         """Returns the latest timeline that was POSTed from the player."""

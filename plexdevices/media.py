@@ -10,9 +10,17 @@ log = logging.getLogger(__name__)
 class MediaContainer(object):
     """An object representing a Plex MediaContainer."""
 
-    def __init__(self, server, data):
+    def __init__(self, server, data, endpoint=None, params=None, page=0, size=None):
         #: Dictionary of the MediaContainer's values.
+        if type(data) is bytes:
+            data = plexdevices.utils.parse_response(data.decode())
+        elif type(data) is str:
+            data = plexdevices.utils.parse_response(data)
         self.data = data
+        self._endpoint = endpoint
+        self._params = params
+        self._page = page
+        self._size = size
         #: The :class:`Server <plexdevices.device.Server>` which this container was retrieved from.
         self.server = server
         if '_children' in data:
@@ -29,6 +37,22 @@ class MediaContainer(object):
 
     def __len__(self):
         return len(self.children)
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.data == other.data
+        return False
+
+    def fetch_more(self):
+        """ """
+        if self._size is None:
+            return
+        if len(self.children) < self.total_size:
+            next_page = self.server.media_container(
+                self._endpoint, self._size, self._page + 1, self._params,
+                timeout=5)
+            self._page += 1
+            self.children += next_page.children
 
     @property
     def identifier(self):
@@ -104,8 +128,8 @@ class PlayQueue(MediaContainer):
 
     def update(self):
         """Update the :class:`PlayQueue <plexdevices.media.PlayQueue>`'s data from its server."""
-        data = self.server.request('/playQueues/{}'.format(self.id))
-        self.__init__(self.server, data)
+        res = self.server.request('/playQueues/{}'.format(self.id))
+        self.__init__(self.server, res.text)
 
     def select(self, item):
         if item not in self.children or 'playQueueItemID' not in item.data:
@@ -133,10 +157,10 @@ class PlayQueue(MediaContainer):
         """Remove a :class:`MediaItem <plexdevices.media.MediaItem>` from the PlayQueue."""
         url = '/playQueues/{}/items/{}'.format(self.id,
                                                item.data['playQueueItemID'])
-        code, data = self.server.request(url, method='DELETE',
-                                         headers={'Accept': 'application/json'})
-        if 200 <= code < 400:
-            self.__init__(self.server, plexdevices.compat.json.loads(data))
+        res = self.server.request(url, method='DELETE',
+                                   headers={'Accept': 'application/json'})
+        if 200 <= res.status_code < 400:
+            self.__init__(self.server, plexdevices.compat.json.loads(res.text))
         else:
             log.error('playqueue: could not remove item from playqueue.')
 
@@ -147,12 +171,12 @@ class PlayQueue(MediaContainer):
         headers['Accept'] = 'application/json'
         headers.update(player_headers)
         media, uri = self.media_uri(item, player_headers)
-        code, data = self.server.request('/playQueues/{}'.format(self.id),
-                                         method='PUT',
-                                         headers=headers,
-                                         params={'type': media, 'uri': uri})
-        if 200 <= code < 400:
-            self.__init__(self.server, plexdevices.compat.json.loads(data))
+        res = self.server.request('/playQueues/{}'.format(self.id),
+                                   method='PUT',
+                                   headers=headers,
+                                   params={'type': media, 'uri': uri})
+        if 200 <= res.status_code < 400:
+            self.__init__(self.server, plexdevices.compat.json.loads(res.text))
         else:
             log.error('playqueue: could not add item to playqueue.')
 
@@ -166,7 +190,7 @@ class PlayQueue(MediaContainer):
         :param state: playing, stopped, paused"""
         if item is None or 'playQueueItemID' not in item.data:
             return False
-        code, res = self.server.request('/:/timeline', headers=headers, params={
+        res = self.server.request('/:/timeline', headers=headers, params={
             'state': state,
             'identifier': self.identifier,
             'playQueueItemID': item.data['playQueueItemID'],
@@ -176,7 +200,7 @@ class PlayQueue(MediaContainer):
             'key': item.key
         })
         log.debug(('PlayQueue: TIMELINE '
-                   '{}/{} - {}'.format(time, item.duration, code)))
+                   '{}/{} - {}'.format(time, item.duration, res.status_code)))
         return True
 
     @staticmethod
@@ -212,11 +236,11 @@ class PlayQueue(MediaContainer):
         headers['Accept'] = 'application/json'
         headers.update(player_headers)
         media, uri = cls.media_uri(item, player_headers)
-        code, data = server.request('/playQueues',
-                                    method='POST',
-                                    headers=headers,
-                                    params={'type': media, 'uri': uri})
-        pqid = plexdevices.compat.json.loads(data)['playQueueID']
+        res = server.request('/playQueues',
+                              method='POST',
+                              headers=headers,
+                              params={'type': media, 'uri': uri})
+        pqid = plexdevices.compat.json.loads(res.text)['playQueueID']
         return cls(server, server.container('/playQueues/{}'.format(pqid)))
 
 
@@ -236,6 +260,11 @@ class BaseObject(object):
 
     def __repr__(self):
         return '<{}: {}>'.format(self.__class__.__name__, self.title)
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.data == other.data
+        return False
 
     @property
     def markable(self):

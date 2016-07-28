@@ -144,59 +144,47 @@ class Device(plexdevices.compat.with_metaclass(DynamicInheritance)):
         self.active = None
         return self.active
 
-    def request(self, endpoint, method='GET', data=None, params=None,
-                headers={}, raw=False, allow_redirects=True):
-        """Make an HTTP request to the device.
+    def request(self, endpoint, method='GET', **kwargs):
+        """Make a request to the devices. This is a wrapper for
+        :obj:`requests.request()`
 
         Args:
-            endpoint (:obj:`str`): location on server.
+            endpoint (:obj:`str`): destination on the server.
                 e.g. ``/library/onDeck``.
-            method (:obj:`str`, optional): request function.
-            data (:obj:`dict`, optional): data to send with the request.
-            params (:obj:`dict`, optional): params to include in the URL.
-            headers (:obj:`dict`, optional): additional headers.
-            raw (:obj:`bool`, optional): return raw data.
-            allow_redirects (:obj:`bool`, optional): follow 302 redirects.
+            method (:obj:`str`): request method.
+            **kwargs: args to pass to :obj:`requests.request()`.
 
         Returns:
-            :obj:`tuple`: (HTTP status code, data)
+            :obj:`requests.Response`
 
+        Raises:
+            ConnectionError
+            requests.exceptions.HTTPError
+            requests.exceptions.Timeout
         """
         if self.active is None:
             self._active_connection()
             if self.active is None:
                 log.error('request: unable to get an active connection.')
-                raise plexdevices.exceptions.DeviceConnectionsError(self)
-        if 'X-Plex-Token' not in headers:
-            headers.update(self.headers)
-        try:
-            url = (self.active.uri + endpoint if self.https_required else
-                   'http://{}:{}{}'.format(self.active.address,
-                                           self.active.port, endpoint))
-            log.debug(('request: URL={}, raw={}, headers={}, params={}, '
-                       'allow_redirects={}').format(url, raw, headers, params,
-                                                    allow_redirects))
-            res = requests.request(method=method, url=url, headers=headers,
-                                   params=params, data=data,
-                                   allow_redirects=allow_redirects)
-        except (requests.exceptions.ConnectionError,
-                requests.exceptions.Timeout) as e:
-            log.error('request: error connecting - ' + str(e))
-            self.active = None
-            raise plexdevices.exceptions.DeviceConnectionsError(self)
+                raise ConnectionError('Unable to connect to device.')
+        if 'headers' in kwargs:
+            if 'X-Plex-Token' not in kwargs['headers']:
+                kwargs['headers'].update(self.headers)
         else:
-            log.debug('response: %d' % res.status_code)
-            if res.status_code == 302:
-                return (res.status_code, res.headers['Location'])
-            else:
-                return (res.status_code, res.content if raw else res.text)
+            kwargs['headers'] = self.headers
+        url = (self.active.uri + endpoint if self.https_required else
+               'http://{}:{}{}'.format(self.active.address,
+                                       self.active.port, endpoint))
+        log.debug('request: {} {}, {}'.format(method, url, kwargs))
+        res = requests.request(method, url, **kwargs)
+        res.raise_for_status()
+        return res
 
 
 class Server(Device):
     """A :class:`Device <plexdevices.device.Device>` which provides a server."""
 
-    def container(self, endpoint, size=None, page=None, params=None,
-                  usejson=True):
+    def container(self, endpoint, size=None, page=None, params=None, **kwargs):
         """
         Args:
             endpoint (:obj:`str`): destination on the server.
@@ -212,17 +200,15 @@ class Server(Device):
 
         """
         headers = self.headers
-        if usejson:
-            headers['Accept'] = 'application/json'
+        headers['Accept'] = 'application/json'
         if size is not None and page is not None:
             headers['X-Plex-Container-Start'] = page * size
             headers['X-Plex-Container-Size'] = size
-        code, msg = self.request(endpoint, method='GET', params=params,
-                                 headers=headers)
-        return plexdevices.utils.parse_response(msg)
+        res = self.request(endpoint, method='GET', params=params,
+                           headers=headers, stream=True, **kwargs)
+        return plexdevices.utils.parse_response(res.text)
 
-    def media_container(self, endpoint, size=None, page=None, params=None,
-                        usejson=True):
+    def media_container(self, endpoint, size=None, page=None, params=None, **kwargs):
         """
         Args:
             endpoint (:obj:`str`): destination on the server.
@@ -238,10 +224,11 @@ class Server(Device):
             object representing a Plex Media Container.
 
         """
-        data = self.container(endpoint, size, page, params, usejson)
-        return plexdevices.media.MediaContainer(self, data)
+        data = self.container(endpoint, size, page, params, **kwargs)
+        return plexdevices.media.MediaContainer(
+            self, data, endpoint, params, page, size)
 
-    def image(self, endpoint, w=None, h=None):
+    def image(self, endpoint, w=None, h=None, **kwargs):
         """If w and h are set, the server will transcode the image to the
         given size.
 
@@ -252,22 +239,41 @@ class Server(Device):
             h (:obj:`int`, optional): height to transcode.
 
         Returns:
-             :obj:`str`: raw data of an image.
+             :obj:`requests.Response`
 
         """
         if endpoint.startswith('http'):
-            res = requests.get(endpoint)
-            return res.content
+            log.debug('requesting image.')
+            return requests.get(endpoint, stream=True, **kwargs)
 
-        endpoint, params = (
-            (endpoint, None) if w is None or h is None else
-            ('/photo/:/transcode', {'url': endpoint,
-                                    'width': w, 'height': h, 'maxSize': 1}))
-        code, res = self.request(endpoint, headers=self.headers, params=params,
-                                 raw=True)
-        return res
+        if not w or not h:
+            params = None
+        else:
+            params = {
+                'url': endpoint,
+                'width': w,
+                'height': h,
+                'maxSize': 1
+            }
+            endpoint = '/photo/:/transcode'
 
-    def hub(self, endpoint, size=None, page=None, params=None):
+        log.debug('requesting transcoded image  ')
+        return self.request(endpoint, headers=self.headers, params=params,
+                            stream=True, **kwargs)
+
+    def photo_transcoder_url(self, url, w, h):
+        params = {
+            'url': url,
+            'width': w,
+            'height': h,
+            'maxSize': 1
+        }
+        url = 'http://{}:{}/photo/:/transcode?X-Plex-Token={}&{}'.format(
+            self.active.address, self.active.port, self.access_token,
+            plexdevices.compat.urlencode(params))
+        return url
+
+    def hub(self, endpoint, size=None, page=None, params=None, **kwargs):
         """`added in 0.4.0`
 
         Args:
@@ -281,7 +287,7 @@ class Server(Device):
             representing a Media Container.
 
         """
-        data = self.container(endpoint, size, page, params)
+        data = self.container(endpoint, size, page, params, **kwargs)
         return plexdevices.hubs.HubsContainer(self, data)
 
 
@@ -299,6 +305,11 @@ class Connection(object):
         self.active = False
         #: uri set by test()
         self.url = None
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.data == other.data
+        return False
 
     @property
     def protocol(self):

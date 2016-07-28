@@ -109,11 +109,11 @@ def create_play_queue(media_item, player_identifier, player_name):
     headers['Accept'] = 'application/json'
     headers.update(player_headers)
     media, uri = plexdevices.media.PlayQueue.media_uri(media_item, player_headers)
-    code, data = server.request('/playQueues',
-                                method='POST',
-                                headers=headers,
-                                params={'type': media, 'uri': uri})
-    pqid = plexdevices.compat.json.loads(data)['playQueueID']
+    res = server.request('/playQueues',
+                          method='POST',
+                          headers=headers,
+                          params={'type': media, 'uri': uri})
+    pqid = plexdevices.compat.json.loads(res.text)['playQueueID']
     return plexdevices.media.PlayQueue(
         server, server.container('/playQueues/{}'.format(pqid)))
 
