@@ -53,8 +53,10 @@ class Session(object):
         ``https://plex.tv/api/resources``
 
         """
-        del self.servers[:]
-        del self.players[:]
+        prev_servers = self.servers
+        self.servers = []
+        prev_players = self.players
+        self.players = []
         try:
             log.debug('getting devices.')
             res = requests.get('https://plex.tv/api/resources',
@@ -83,10 +85,19 @@ class Session(object):
                 elif item['_elementType'] == 'Device':
                     device = plexdevices.device.create_device(item)
                     log.debug(device)
-                    if isinstance(device, plexdevices.device.Server):
-                        self.servers.append(device)
-                    if isinstance(device, plexdevices.device.Player):
-                        self.players.append(device)
+                    if device in prev_servers:
+                        old = prev_servers[prev_servers.index(device)]
+                        old.__init__(device.data)
+                        self.servers.append(old)
+                    elif device in prev_players:
+                        old = prev_players[prev_players.index(device)]
+                        old.__init__(device.data)
+                        self.players.append(old)
+                    else:
+                        if isinstance(device, plexdevices.device.Server):
+                            self.servers.append(device)
+                        if isinstance(device, plexdevices.device.Player):
+                            self.players.append(device)
 
     def login(self, password):
         """Retrieve the token for the session user from
